@@ -28,7 +28,6 @@ game_state = STATE_MENU
 GameOver = False 
 # When this is true -> go to game over screen 
 
-
 #Display Settings
 SCREEN_WIDTH = 1600
 SCREEN_HEIGHT = 900
@@ -59,7 +58,7 @@ if BaseHealth == 0:
         GameOver = True
 # Non Dynamic Images 
 background_image = pygame.image.load(os.path.join(terrain_assests_dir,"Water Background color.png"))
-tile_image = pygame.image.load(os.path.join(tile_dir),"Tilemap_color4.png")
+tile_image = pygame.image.load(os.path.join(tile_dir,"Tilemap_color4.png"))
 
 #Player Sprite Animation BS bro oh my fuckin god
 
@@ -167,7 +166,7 @@ class MainPlayer:
             print(f"This is ur Current Player Stats,\n{MainHealth}HP\n{MainSpeed}m/s\n{MainSpread}cm\n{MainDamage}")
         if Keys[pygame.K_LSHIFT] or Keys[pygame.K_LCTRL]:
             print(f"Dash Is Being consumed")
-            Dash()
+            #Dash()
 
         #Add detection on where mouse is clicked and make player face that way 
         #Add check if been hit, if true then high light character red AND take away EnemyDamage. 
@@ -210,7 +209,9 @@ def create_map():
     for i in range(4):
         tile = Tile(Player.rect.x + i*TILE_SIZE, Player.rect.y + TILE_SIZE*2,tile_image)
         tiles.append(tile)
-#
+def tile_draw():
+    for tile in tiles:
+        screen.blit(tile.image, tile)
 
 #Super sloppy menu code
 menu = pygame_menu.Menu('Wild Waves', 600, 400, theme=pygame_menu.themes.THEME_BLUE)
@@ -249,8 +250,9 @@ while game_running: # every frame the stuff below is happening
         menu.update(events)     #non-blocking menu 
         menu.draw(screen)
     else:
+        tile_draw()
         Player.update()
-        screen.fill(PRETTYCOLOR)
+        #screen.fill(PRETTYCOLOR)
         Player.draw(screen)
     
     # flip() the display to put your work on screen
