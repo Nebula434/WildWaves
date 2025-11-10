@@ -35,8 +35,25 @@ screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Wild Waves")
 FONT = pygame.font.Font(None, 80)
 #TILE VARIABLES
-TILE_SIZE = 64
+# Non Dynamic Images 
+background_image = pygame.image.load(os.path.join(terrain_assests_dir,"Background.png"))
+tile_image = pygame.image.load(os.path.join(tile_dir,"Tilemap_color4.png"))
+# Water textures
+water_tile = pygame.image.load(os.path.join(terrain_assests_dir, "Water Background color.png")).convert()
+# foam strip/sheet; update the filename to your asset
+water_foam_sheet = pygame.image.load(os.path.join(terrain_assests_dir, "waterfoam.png")).convert_alpha()
+BORDER_THICKNESS = 192  # ring thickness around the screen; adjust as you like
+TILE_SIZE = 192
+TILE_OVERLAP = 16
+TILE_STEP = TILE_SIZE - TILE_OVERLAP  # overlap for ground tiling
 
+def get_rect_tile(sheet, x, y, w, h):
+    return sheet.subsurface(pygame.Rect(x, y, w, h)).copy()
+# Ground tile (top-left)
+ground_tile = get_rect_tile(tile_image, 0 * 192, 0 * 192, 192, 192)
+
+# Top-left tile (192x192) from the tileset
+single_tile_image = get_rect_tile(tile_image, 0, 0, 192, 192)
 
 # Player Stats & Health, need a better way to categorize this
 MainSpeed = 3
@@ -56,9 +73,6 @@ EnemyHealth = 20
 BaseHealth = 15
 if BaseHealth == 0:
         GameOver = True
-# Non Dynamic Images 
-background_image = pygame.image.load(os.path.join(terrain_assests_dir,"Water Background color.png"))
-tile_image = pygame.image.load(os.path.join(tile_dir,"Tilemap_color4.png"))
 
 #Player Sprite Animation BS bro oh my fuckin god
 
@@ -104,9 +118,55 @@ anim_speed_ms = {
     "enemy_attack1" : 50,
     "enemy_attack2" : 60,
 }
+
+# Water Code, need this broken down to make it easier to understand
+def load_strip(sheet, frame_w, frame_h, num_frames, spacing_x=0, margin_x=0):
+    frames = []
+    x = margin_x
+    for _ in range(num_frames):
+        rect = pygame.Rect(x, 0, frame_w, frame_h)
+        frames.append(sheet.subsurface(rect).copy())
+        x += frame_w + spacing_x
+    return frames
+# Foam animation config (set to your sheet)
+FOAM_W = 64
+FOAM_H = 64
+FOAM_FRAMES = 16
+FOAM_FPS = 8
+FOAM_STEP = 96           # spacing to consider emitter slots along edges
+FOAM_CHANCE = 0.35       # chance to place an emitter at a slot
+FOAM_COOLDOWN_RANGE = (1200, 3500)  # ms between bursts
+# Foam animation setup
+
+foam_frames = load_strip(water_foam_sheet, FOAM_W, FOAM_H, FOAM_FRAMES)
+foam_rot_left  = [pygame.transform.rotate(f, 90)  for f in foam_frames]
+foam_rot_right = [pygame.transform.rotate(f, -90) for f in foam_frames]
+foam_flip_bot  = [pygame.transform.flip(f, False, True) for f in foam_frames]
+
+
+
+def tile_fill(surface, img, rect):
+    iw, ih = img.get_width(), img.get_height()
+    x0, y0, w, h = rect
+    for y in range(y0, y0 + h, ih):
+        for x in range(x0, x0 + w, iw):
+            surface.blit(img, (x, y))
+
+def draw_water_border():
+    # Four border rectangles (outer to inner ring)
+    top_rect    = (0, 0, SCREEN_WIDTH, BORDER_THICKNESS)
+    bottom_rect = (0, SCREEN_HEIGHT - BORDER_THICKNESS, SCREEN_WIDTH, BORDER_THICKNESS)
+    left_rect   = (0, 0, BORDER_THICKNESS, SCREEN_HEIGHT)
+    right_rect  = (SCREEN_WIDTH - BORDER_THICKNESS, 0, BORDER_THICKNESS, SCREEN_HEIGHT)
+
+    tile_fill(screen, water_tile, top_rect)
+    tile_fill(screen, water_tile, bottom_rect)
+    tile_fill(screen, water_tile, left_rect)
+    tile_fill(screen, water_tile, right_rect)
+
 #Character Abilities, to start, Dash, Magic Missle, Thunder Storm (finds enemies in radius around player, casts a lighting bolt on them, 60 second cooldown)
 
-    
+#   
 # MainPlayer consists of all the things the player does & handles the animation within, maybe should make a animation class?
 class MainPlayer:
     def __init__(self):
@@ -140,7 +200,6 @@ class MainPlayer:
             moving = True
           #  if Player.rect.y < -100:
           #      Player.rect.y = -100
-        
         if Keys[pygame.K_s] or Keys[pygame.K_DOWN]:
             print("Pressed S or Down arrow")
             #self.rect.move_ip(0,MainSpeed)
@@ -187,31 +246,96 @@ class MainPlayer:
         # ---- #
 
     #draws the player
-    def draw(self, surface):
-        #clears previous area than draws over it
-        #surface.fill(PRETTYCOLOR, self.rect)  # keeping this removed for now, just causes a shading problem around the background.
-        screen.blit(background_image,(0,0)) # this is what is layered over the background
+    def draw(self, surface): # this is what is layered over the background
         surface.blit(self.image, self.rect) # character is drawn
 
 class Enemy:
       def __init__(self):
             
             pass
-#Map Creation and Tile Code
-class Tile(pygame.Rect):
-    def __init__(self, x, y, image):
-        pygame.Rect.__init__(self,x,y,TILE_SIZE,TILE_SIZE)
-        self.image = image
 
-         
 
-def create_map():
-    for i in range(4):
-        tile = Tile(Player.rect.x + i*TILE_SIZE, Player.rect.y + TILE_SIZE*2,tile_image)
-        tiles.append(tile)
-def tile_draw():
-    for tile in tiles:
-        screen.blit(tile.image, tile)
+#    ~ Understanding better why Classes are needed in games, couldn't imagine defining these variables over and over again. ~
+class WaterEmitter:
+    def __init__(self, x, y, frames, fps):
+        self.x = x
+        self.y = y
+        self.frames = frames
+        self.fps = fps
+        self.delay = int(1000 / fps)
+        self.frame = 0
+        self.last = 0
+        self.active = False
+        self.next_start = 0
+
+    def schedule_next(self, now):
+        wmin, wmax = FOAM_COOLDOWN_RANGE
+        self.next_start = now + random.randint(wmin, wmax)
+
+    def start(self, now):
+        self.active = True
+        self.frame = 0
+        self.last = now
+
+    def update(self, now):
+        if not self.active:
+            if now >= self.next_start:
+                self.start(now)
+            return
+        if now - self.last >= self.delay:
+            self.last = now
+            self.frame += 1
+            if self.frame >= len(self.frames):
+                self.active = False
+                self.schedule_next(now)
+                self.frame = 0
+
+    def draw(self, surface):
+        if self.active:
+            surface.blit(self.frames[self.frame], (self.x, self.y))
+
+emitters = []
+#    ~ Water Code, need this broken down to make it easier to understand ~
+def init_water_emitters():
+    emitters.clear()
+    now = pygame.time.get_ticks()
+
+    inner_x0 = BORDER_THICKNESS
+    inner_y0 = BORDER_THICKNESS
+    inner_x1 = SCREEN_WIDTH  - BORDER_THICKNESS
+    inner_y1 = SCREEN_HEIGHT - BORDER_THICKNESS
+
+    # top edge (emit just inside the inner edge)
+    y_top = inner_y0 - FOAM_H // 2
+    for x in range(inner_x0, inner_x1, FOAM_STEP):
+        if random.random() < FOAM_CHANCE:
+            e = WaterEmitter(x, y_top, foam_frames, FOAM_FPS)
+            e.schedule_next(now)
+            emitters.append(e)
+
+    # bottom edge
+    y_bot = inner_y1 - FOAM_H // 2
+    for x in range(inner_x0, inner_x1, FOAM_STEP):
+        if random.random() < FOAM_CHANCE:
+            e = WaterEmitter(x, y_bot, foam_flip_bot, FOAM_FPS)
+            e.schedule_next(now)
+            emitters.append(e)
+
+    # left edge
+    x_left = inner_x0 - FOAM_W // 2
+    for y in range(inner_y0, inner_y1, FOAM_STEP):
+        if random.random() < FOAM_CHANCE:
+            e = WaterEmitter(x_left, y, foam_rot_left, FOAM_FPS)
+            e.schedule_next(now)
+            emitters.append(e)
+
+    # right edge
+    x_right = inner_x1 - FOAM_W // 2
+    for y in range(inner_y0, inner_y1, FOAM_STEP):
+        if random.random() < FOAM_CHANCE:
+            e = WaterEmitter(x_right, y, foam_rot_right, FOAM_FPS)
+            e.schedule_next(now)
+            emitters.append(e)
 
 #Super sloppy menu code
 menu = pygame_menu.Menu('Wild Waves', 600, 400, theme=pygame_menu.themes.THEME_BLUE)
@@ -226,12 +350,81 @@ menu.add.button('Quit', quit_game)
 menu.center_content()
 #Menu Code ^^^^^^
 
+#Tile Code, for the time being this will be used to create the map, but we will need to add a way to create the map dynamically later on
+tiles_ground = []
+
+class Tile(pygame.Rect):
+    def __init__(self, x, y, image):
+        pygame.Rect.__init__(self, x, y, TILE_SIZE, TILE_SIZE)
+        self.image = image
+
+
+def create_ground():
+    tiles_ground.clear()
+    start_x = -TILE_OVERLAP
+    start_y = -TILE_OVERLAP
+    end_x = SCREEN_WIDTH + TILE_SIZE
+    end_y = SCREEN_HEIGHT + TILE_SIZE
+    for y in range(start_y, end_y, TILE_STEP):
+        for x in range(start_x, end_x, TILE_STEP):
+            tiles_ground.append(Tile(x, y, ground_tile))
+
+def tile_draw_ground():
+    for tile in tiles_ground:
+        screen.blit(tile.image, tile)
+
+# choose a single tile from the tileset by grid coordinate
+def get_tile(sheet, col, row, tile_size=TILE_SIZE):
+    rect = pygame.Rect(col * tile_size, row * tile_size, tile_size, tile_size)
+    return sheet.subsurface(rect).copy()
+# Smooth fade from ground into water
+GROUND_FEATHER = 32  # pixels of soft fade (tweak)
+
+def create_ground_surface():
+    # draw all ground tiles to an off-screen surface
+    surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SRCALPHA)
+    for t in tiles_ground:
+        surf.blit(t.image, t)
+
+    # build a soft alpha mask: full alpha in the center, fades to 0 near edges
+    mask = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SRCALPHA)
+    mask.fill((255, 255, 255, 0))
+
+    inner = pygame.Rect(
+        BORDER_THICKNESS, BORDER_THICKNESS,
+        SCREEN_WIDTH - 2 * BORDER_THICKNESS,
+        SCREEN_HEIGHT - 2 * BORDER_THICKNESS
+    )
+
+    # solid center
+    pygame.draw.rect(mask, (255, 255, 255, 255), inner)
+
+    # feather ring: draw expanding rects with increasing alpha
+    for i in range(GROUND_FEATHER):
+        a = int(255 * (i + 1) / (GROUND_FEATHER + 1))  # 0→255 ramp
+        r = inner.inflate(2 * (i + 1), 2 * (i + 1))
+        pygame.draw.rect(mask, (255, 255, 255, a), r, width=GROUND_FEATHER - i)
+
+    # multiply ground by mask alpha for smooth edge
+    surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    return surf
+
+# call after create_ground()
+ground_surface = None
+
+# pick which tile you want (set these to the desired tile position in the PNG)
+CHOSEN_TILE_COL = 0  # change to your column
+CHOSEN_TILE_ROW = 0  # change to your row
+single_tile_image = get_tile(tile_image, CHOSEN_TILE_COL, CHOSEN_TILE_ROW)
+
 
 #Establishing a variable for classes
 Player = MainPlayer()
 WaveEnemy = Enemy()
-tiles = []
-create_map()
+tiles_ground = []
+create_ground()
+ground_surface = create_ground_surface()
+init_water_emitters()
 #
 #
 while game_running: # every frame the stuff below is happening
@@ -250,13 +443,21 @@ while game_running: # every frame the stuff below is happening
         menu.update(events)     #non-blocking menu 
         menu.draw(screen)
     else:
-        tile_draw()
-        Player.update()
-        #screen.fill(PRETTYCOLOR)
-        Player.draw(screen)
-    
-    # flip() the display to put your work on screen
-    pygame.display.flip()
-    clock.tick(60)  # limits FPS to 60
+        now = pygame.time.get_ticks()
+        for e in emitters:
+            e.update(now)
+        # draw after water but before player
+        draw_water_border()
+        for e in emitters:
+            e.draw(screen)
+        #IN ORDER IS VERY IMPORTANT HERE TO ENSURE RENDERING HAPPENS IN THE CORRECT ORDER
+        screen.blit(background_image,(0,0)) # background first, color incase anything bleeds through.
+        screen.blit(ground_surface, (0, 0))  # then ground
+        draw_water_border() # water border
+        Player.update() # player.update() handles the player animation and movement, calling it first begins the animation process.
+        Player.draw(screen) # finally, draw the player
+
+    pygame.display.flip() # need this everytime to update the screen with what my code is doing
+    clock.tick(60)  # FPS 60
 
 pygame.quit()
