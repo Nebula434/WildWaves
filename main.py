@@ -4,55 +4,61 @@ from pygame.locals import *
 import pygame_menu
 import random 
 import os 
-# pygame setup
-pygame.init()
 #le color white
 WHITE = (255, 255, 255)
 # directories 
 wizard_dir = r"E:/Personal Projects/WildWaves/assests/Units/Blue Units/Monk"
 warrior_dir = r"E:/Personal Projects/WildWaves/assests/Units/Blue Units/Warrior"
-#enemies_dir = r"C:/Users/playa/Desktop/MaybeASillyLittleGame/assests/Units/Red Units" # this must be changed later on !!!
+enemy_dir = r"E:\Personal Projects\WildWaves\assests\Units\Red Units\Warrior"
+terrain_assests_dir = r"E:\Personal Projects\WildWaves\assests\Terrain"
+base_assests_dir = r"E:\Personal Projects\WildWaves\assests\Buildings\Blue Buildings"
+#placeholder assests for enemies for the time being
 
-# important py game stuff
+
+
+# important py game stuff, fps, game state, screen
+pygame.init()
 clock = pygame.time.Clock()
-game_running = False
-menu_running = True
-menu_pause = False
-GameOver = False # When this is true -> go to game over screen 
-#GameState = ["menu","paused","playing"] # When player is playing match, set this to Playing, if playing and Keys[K_escape]: GameState "paused"
+game_running = True
+STATE_MENU = "menu"
+STATE_GAME = "game"
+game_state = STATE_MENU
+GameOver = False 
+# When this is true -> go to game over screen 
 
 
 #Display Settings
-SCREEN_WIDTH = 2560
-SCREEN_HEIGHT = 1080
+SCREEN_WIDTH = 1600
+SCREEN_HEIGHT = 900
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-screen.fill(WHITE)
 pygame.display.set_caption("Wild Waves")
 FONT = pygame.font.Font(None, 80)
 
-# Player Stats & Health
+# Player Stats & Health, need a better way to categorize this
 MainSpeed = 3
 MainHealth = 20 
 MainDamage = 5 
 MainSpread= 3 # So the player is able to swing in roughly 3 cm wide, like cutting in half
 ClassChoice = ["none","warrior","wizard"]
-# Important inventory stats like 
-#Weapon Stats this could be done better but I can't apply the matters i want into it 
 
 
 #Enemy Stats
 EnemyDamage = 0
 EnemyHealth = 20
+# Ideally make a way that the enemy varies from warrior our wizard our lancer. 
+
+
 # Base Variables, ideally this variable will be subtracted from later, once BaseHealth = 0 -> Game Over screen
 BaseHealth = 15
 if BaseHealth == 0:
         GameOver = True
+# Non Dynamic Images 
+background_image = pygame.image.load(os.path.join(terrain_assests_dir,"Water Background color.png"))
+
+
 #Player Sprite Animation BS bro oh my fuckin god
-# loads the base player sheet, probably should change this later
-PlayerSpriteSheetPath = os.path.join(wizard_dir,"Idle.png")
-PlayerSpriteSheet = pygame.image.load(PlayerSpriteSheetPath).convert_alpha()
-# Animation helper? im not too sure how this works, gotta research it
-def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margin_x=0):
+
+def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margin_x=0): # animation helper 
     sheet = pygame.image.load(path).convert_alpha()
     frames = []
     x = margin_x
@@ -65,56 +71,55 @@ def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margi
 # frame size for base player sheet, this is mostly the same for each sprite
 FRAME_W = 192
 FRAME_H = 192
-frame_width = FRAME_W
-frame_height = FRAME_H
 # This for the Wizard sprites only, warriors will be seperate. ADDING WIZARD_  might fix a conflicting problem later on
-IDLE_FRAMES = 6
-RUN_FRAMES  = 4
+WIZARD_IDLE_FRAMES = 6
+WIZARD_RUN_FRAMES  = 4
+WIZARD_ATTACK_FRAMES = 11  # this is also the heal frames for wizards!!
+WIZARD_CHARACTER_EFFECT_FRAMES = 11
 
+#Enemy Frames for the sprites, none of these have been tested 11/10
+ENEMY_IDLE_FRAMES = 8
+ENEMY_RUN_FRAMES = 6
+ENEMY_ATTACK_FRAMES = 4
+ENEMY_RETURNATTACK_FRAMES = 4
 animations = {
-    "idle": load_animation(os.path.join(wizard_dir, "Idle.png"), FRAME_W, FRAME_H, IDLE_FRAMES),
-    "run" : load_animation(os.path.join(wizard_dir, "Run.png"),  FRAME_W, FRAME_H, RUN_FRAMES),
+    "wizard_idle": load_animation(os.path.join(wizard_dir, "Idle.png"), FRAME_W, FRAME_H, WIZARD_IDLE_FRAMES),
+    "wizard_run" : load_animation(os.path.join(wizard_dir, "Run.png"),  FRAME_W, FRAME_H, WIZARD_RUN_FRAMES),
+    "enemy_idle": load_animation(os.path.join(enemy_dir, "Warrior_Idle.png"), FRAME_W, FRAME_H, ENEMY_IDLE_FRAMES),
+    "enemy_run": load_animation(os.path.join(enemy_dir, "Warrior_Run.png"), FRAME_W, FRAME_H, ENEMY_RUN_FRAMES),
+    "enemy_attack1": load_animation(os.path.join(enemy_dir, "Warrior_Attack1.png"), FRAME_W, FRAME_H, ENEMY_ATTACK_FRAMES),
+    "enemy_attack2": load_animation(os.path.join(enemy_dir, "Warrior_Attack2.png"), FRAME_W, FRAME_H, ENEMY_ATTACK_FRAMES),
 }
 anim_speed_ms = {
-    "idle": 100,   # ~10 FPS
-    "run" : 70,    # ~14 FPS (snappier)
+    "wizard_idle": 100,   # ~10 FPS
+    "wizard_run" : 70,    # ~14 FPS (snappier)
+    "enemy_idle" : 100,
+    "enemy_run" : 70,
+    "enemy_attack1" : 50,
+    "enemy_attack2" : 60,
 }
-
-num_frames = IDLE_FRAMES 
-# Says its slicing the sprite sheet into individual frames
-frames = []
-for i in range(num_frames):
-    frame_rect = pygame.Rect(i * frame_width, 0, frame_width, frame_height)
-    frame = PlayerSpriteSheet.subsurface(frame_rect).copy()
-    frames.append(frame)
-
 # MainPlayer consists of all the things the player does & handles the animation within, maybe should make a animation class?
 class MainPlayer:
     def __init__(self):
             super().__init__()
             self.animations = animations
-            self.anim = "idle"
+            self.anim = "wizard_idle" 
             self.frames = self.animations[self.anim]
             self.frame_index = 0
-            self.image = frames[self.frame_index]
-            self.rect = self.image.get_rect(center=(640,360))
-            self.frame_delay_ms = 100          # ~10 fps
-            self.last_update_ms = pygame.time.get_ticks()
+            self.image = self.frames[self.frame_index] # image is decided after running through which frame to pick from above
+            self.rect = self.image.get_rect(center=(640,360)) #Character is drawn here each time th game is started 
+            self.frame_delay_ms = 100          #how fast the animation runs, 10 fps
+            self.last_update_ms = pygame.time.get_ticks() 
             self.facing_left = False
     def set_animation(self, name):
         if name != self.anim:
             self.anim = name
-            self.frames = self.animations[self.anim]
+            self.frames = self.animations[self.anim] # 
             self.frame_index = 0
             self.last_update_ms = pygame.time.get_ticks()
             # keep position while swapping images
-            self.rect = self.image.get_rect(center=self.rect.center)
-    def PAttributes():
-        print(f"Stat's logged")
-        pass
-    def UpdateDamage(self):
-            print(f"Damage Taken \n{EnemyDamage}")
-    def update(self): #frame update !!
+            self.rect = self.image.get_rect(center=self.rect.center) # image is decided again after 
+    def update(self): #everything that needs to happen in each frame for character to do as they should 
 #       ~ Movement, really simple for the most part, adjusting self.facing_left to assume which direction to face the character ~
         Keys = pygame.key.get_pressed()
         moving = False
@@ -134,45 +139,80 @@ class MainPlayer:
              print("The Game has been changed to playing")
         if Keys[pygame.K_o]:
             print(f"This is ur Current Player Stats,\n{MainHealth}HP\n{MainSpeed}m/s\n{MainSpread}cm\n{MainDamage}")
-   #     if GameState[2] and Keys[K_escape]: 
-     #          GameState = [1] 
-        # --- choose animation based on movement ---
-        self.set_animation("run" if moving else "idle")  
-        # --- advance animation on its own speed ---
+        #Add detection on where mouse is clicked and make player face that way 
+        #Add check if been hit, if true then high light character red AND take away EnemyDamage. 
+        #Add creation of sprites to hit enemies, magic missle is the first spell to make
+
+
+
+        
+        # Animation code i didnt make, not too sure how it works 
+        self.set_animation("wizard_run" if moving else "wizard_idle")  
         now = pygame.time.get_ticks()
         if now - self.last_update_ms > anim_speed_ms[self.anim]:
             self.last_update_ms = now
             self.frame_index = (self.frame_index + 1) % len(self.frames)
-        # --- pick current frame, then flip if needed ---
+        # pick current frame, then flip if needed 
         self.image = self.frames[self.frame_index]
         if self.facing_left:
             self.image = pygame.transform.flip(self.image, True, False)
-    def draw(self, surface):
+        # ---- #
 
-        surface.fill(WHITE, self.rect)
-        surface.blit(self.image, self.rect)
+
+    #draws the player
+    def draw(self, surface):
+        #clears previous area than draws over it
+        surface.fill(WHITE, self.rect)  # define the color u want the background to be 
+        screen.blit(background_image,(0,0)) # this is what is layered over the background
+        surface.blit(self.image, self.rect) # character is drawn
 
 class Enemy:
       def __init__(self):
             
             pass
-Player = MainPlayer()
-WaveEnemies = Enemy()
+
+
+#Super sloppy menu code
+menu = pygame_menu.Menu('Wild Waves', 600, 400, theme=pygame_menu.themes.THEME_BLUE)
 def start_game():
-    game_running = True
+     global game_state
+     game_state = STATE_GAME 
+def quit_game():
+    pygame.event.post(pygame.event.Event(pygame.QUIT)) #if im calling a pygame event in a function it looks like this why???
+menu.add.text_input('Name :', default='John Doe')
+menu.add.button(f'Play', start_game)
+menu.add.button('Quit', quit_game)
+menu.center_content()
+#Menu Code ^^^^^^
 
-pygame_menu.add.button('Play', game_running)
 
+#Establishing a variable for classes
+Player = MainPlayer()
+WaveEnemy = Enemy()
+
+
+#
+#
 while game_running: # every frame the stuff below is happening
     # pygame.QUIT event means the user clicked X to close your window
     # GameState = [0]
+    events = pygame.event.get()
+    for event in events:
+        pass
     for event in pygame.event.get():
         if event.type == pygame.QUIT: game_running = False
-    
-    Player.update()
-    Player.draw(screen)
-    
+    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and game_state == STATE_GAME:
+            game_state = STATE_MENU
 
+    if game_state == STATE_MENU:
+        screen.fill((25, 25, 30))
+        menu.update(events)     #non-blocking menu 
+        menu.draw(screen)
+    else:
+        Player.update()
+        screen.fill(WHITE)
+        Player.draw(screen)
+    
     # flip() the display to put your work on screen
     pygame.display.flip()
     clock.tick(60)  # limits FPS to 60
