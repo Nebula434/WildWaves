@@ -6,6 +6,7 @@ import random
 import os 
 #le color white
 WHITE = (255, 255, 255)
+PRETTYCOLOR = ( 232, 181,189)
 # directories 
 wizard_dir = r"E:/Personal Projects/WildWaves/assests/Units/Blue Units/Monk"
 warrior_dir = r"E:/Personal Projects/WildWaves/assests/Units/Blue Units/Warrior"
@@ -76,6 +77,8 @@ WIZARD_IDLE_FRAMES = 6
 WIZARD_RUN_FRAMES  = 4
 WIZARD_ATTACK_FRAMES = 11  # this is also the heal frames for wizards!!
 WIZARD_CHARACTER_EFFECT_FRAMES = 11
+PLAYER_HEIGHT = 192
+PLAYER_WIDITH = 192
 
 #Enemy Frames for the sprites, none of these have been tested 11/10
 ENEMY_IDLE_FRAMES = 8
@@ -123,14 +126,30 @@ class MainPlayer:
 #       ~ Movement, really simple for the most part, adjusting self.facing_left to assume which direction to face the character ~
         Keys = pygame.key.get_pressed()
         moving = False
-        if Keys[pygame.K_a]:
+        if Keys[pygame.K_w] or Keys[pygame.K_UP]:
+            print("Pressed W or Up arrow")
+           # self.rect.move_ip(0,-MainSpeed)
+            Player.rect.y = max(Player.rect.y - MainSpeed, -100) # -100 since thats when the top part ends
+
+            moving = True
+          #  if Player.rect.y < -100:
+          #      Player.rect.y = -100
+        
+        if Keys[pygame.K_s] or Keys[pygame.K_DOWN]:
+            print("Pressed S or Down arrow")
+            #self.rect.move_ip(0,MainSpeed)
+            moving = True
+            Player.rect.y = min(Player.rect.y + MainSpeed, ((SCREEN_HEIGHT - PLAYER_HEIGHT)+50)) # +50 b/c the boundry cuts off early for some reason? 
+        if Keys[pygame.K_a] or Keys[pygame.K_LEFT]:
             print("Pressed A or Left arrow")
-            self.rect.move_ip(-MainSpeed,0)
+            #self.rect.move_ip(-MainSpeed,0)
+            Player.rect.x =max(Player.rect.x - MainSpeed, -50)
             self.facing_left = True
             moving = True
-        if Keys[pygame.K_d]:
+        if Keys[pygame.K_d] or Keys[pygame.K_RIGHT]:
             print("Pressed D or Right arrow")
-            self.rect.move_ip(MainSpeed,0)
+            #self.rect.move_ip(MainSpeed,0)
+            Player.rect.x =min(Player.rect.x + MainSpeed,((SCREEN_WIDTH - PLAYER_HEIGHT)+50))
             self.facing_left = False
             moving = True 
         if Keys[pygame.K_SPACE]:
@@ -142,7 +161,6 @@ class MainPlayer:
         #Add detection on where mouse is clicked and make player face that way 
         #Add check if been hit, if true then high light character red AND take away EnemyDamage. 
         #Add creation of sprites to hit enemies, magic missle is the first spell to make
-
 
 
         
@@ -158,11 +176,10 @@ class MainPlayer:
             self.image = pygame.transform.flip(self.image, True, False)
         # ---- #
 
-
     #draws the player
     def draw(self, surface):
         #clears previous area than draws over it
-        surface.fill(WHITE, self.rect)  # define the color u want the background to be 
+        #surface.fill(PRETTYCOLOR, self.rect)  # keeping this removed for now, just causes a shading problem around the background.
         screen.blit(background_image,(0,0)) # this is what is layered over the background
         surface.blit(self.image, self.rect) # character is drawn
 
@@ -210,7 +227,7 @@ while game_running: # every frame the stuff below is happening
         menu.draw(screen)
     else:
         Player.update()
-        screen.fill(WHITE)
+        screen.fill(PRETTYCOLOR)
         Player.draw(screen)
     
     # flip() the display to put your work on screen
