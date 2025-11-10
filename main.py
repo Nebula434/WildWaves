@@ -13,6 +13,7 @@ warrior_dir = r"E:/Personal Projects/WildWaves/assests/Units/Blue Units/Warrior"
 enemy_dir = r"E:\Personal Projects\WildWaves\assests\Units\Red Units\Warrior"
 terrain_assests_dir = r"E:\Personal Projects\WildWaves\assests\Terrain"
 base_assests_dir = r"E:\Personal Projects\WildWaves\assests\Buildings\Blue Buildings"
+tile_dir = r"E:\Personal Projects\WildWaves\assests\Terrain\Tiles"
 #placeholder assests for enemies for the time being
 
 
@@ -34,6 +35,9 @@ SCREEN_HEIGHT = 900
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Wild Waves")
 FONT = pygame.font.Font(None, 80)
+#TILE VARIABLES
+TILE_SIZE = 64
+
 
 # Player Stats & Health, need a better way to categorize this
 MainSpeed = 3
@@ -55,7 +59,7 @@ if BaseHealth == 0:
         GameOver = True
 # Non Dynamic Images 
 background_image = pygame.image.load(os.path.join(terrain_assests_dir,"Water Background color.png"))
-
+tile_image = pygame.image.load(os.path.join(tile_dir),"Tilemap_color4.png")
 
 #Player Sprite Animation BS bro oh my fuckin god
 
@@ -101,6 +105,9 @@ anim_speed_ms = {
     "enemy_attack1" : 50,
     "enemy_attack2" : 60,
 }
+#Character Abilities, to start, Dash, Magic Missle, Thunder Storm (finds enemies in radius around player, casts a lighting bolt on them, 60 second cooldown)
+
+    
 # MainPlayer consists of all the things the player does & handles the animation within, maybe should make a animation class?
 class MainPlayer:
     def __init__(self):
@@ -158,6 +165,10 @@ class MainPlayer:
              print("The Game has been changed to playing")
         if Keys[pygame.K_o]:
             print(f"This is ur Current Player Stats,\n{MainHealth}HP\n{MainSpeed}m/s\n{MainSpread}cm\n{MainDamage}")
+        if Keys[pygame.K_LSHIFT] or Keys[pygame.K_LCTRL]:
+            print(f"Dash Is Being consumed")
+            Dash()
+
         #Add detection on where mouse is clicked and make player face that way 
         #Add check if been hit, if true then high light character red AND take away EnemyDamage. 
         #Add creation of sprites to hit enemies, magic missle is the first spell to make
@@ -187,7 +198,19 @@ class Enemy:
       def __init__(self):
             
             pass
+#Map Creation and Tile Code
+class Tile(pygame.Rect):
+    def __init__(self, x, y, image):
+        pygame.Rect.__init__(self,x,y,TILE_SIZE,TILE_SIZE)
+        self.image = image
 
+         
+
+def create_map():
+    for i in range(4):
+        tile = Tile(Player.rect.x + i*TILE_SIZE, Player.rect.y + TILE_SIZE*2,tile_image)
+        tiles.append(tile)
+#
 
 #Super sloppy menu code
 menu = pygame_menu.Menu('Wild Waves', 600, 400, theme=pygame_menu.themes.THEME_BLUE)
@@ -206,8 +229,8 @@ menu.center_content()
 #Establishing a variable for classes
 Player = MainPlayer()
 WaveEnemy = Enemy()
-
-
+tiles = []
+create_map()
 #
 #
 while game_running: # every frame the stuff below is happening
