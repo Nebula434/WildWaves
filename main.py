@@ -1,6 +1,7 @@
 # Example file showing a basic pygame "game loop"
 import pygame, sys
 from pygame.locals import *
+import pygame_menu
 import random 
 import os 
 # pygame setup
@@ -14,9 +15,11 @@ warrior_dir = r"E:/Personal Projects/WildWaves/assests/Units/Blue Units/Warrior"
 
 # important py game stuff
 clock = pygame.time.Clock()
-running = True
+game_running = False
+menu_running = True
+menu_pause = False
 GameOver = False # When this is true -> go to game over screen 
-GameState = ["menu","paused","playing"] # When player is playing match, set this to Playing, if playing and Keys[K_escape]: GameState "paused"
+#GameState = ["menu","paused","playing"] # When player is playing match, set this to Playing, if playing and Keys[K_escape]: GameState "paused"
 
 
 #Display Settings
@@ -25,7 +28,7 @@ SCREEN_HEIGHT = 1080
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 screen.fill(WHITE)
 pygame.display.set_caption("Wild Waves")
-
+FONT = pygame.font.Font(None, 80)
 
 # Player Stats & Health
 MainSpeed = 3
@@ -59,13 +62,12 @@ def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margi
         frames.append(sheet.subsurface(rect).copy())
         x += frame_w + spacing_x
     return frames
-
 # frame size for base player sheet, this is mostly the same for each sprite
 FRAME_W = 192
 FRAME_H = 192
 frame_width = FRAME_W
 frame_height = FRAME_H
-# This for the Wizard sprites only, warriors will be seperate 
+# This for the Wizard sprites only, warriors will be seperate. ADDING WIZARD_  might fix a conflicting problem later on
 IDLE_FRAMES = 6
 RUN_FRAMES  = 4
 
@@ -86,6 +88,7 @@ for i in range(num_frames):
     frame = PlayerSpriteSheet.subsurface(frame_rect).copy()
     frames.append(frame)
 
+# MainPlayer consists of all the things the player does & handles the animation within, maybe should make a animation class?
 class MainPlayer:
     def __init__(self):
             super().__init__()
@@ -106,13 +109,15 @@ class MainPlayer:
             self.last_update_ms = pygame.time.get_ticks()
             # keep position while swapping images
             self.rect = self.image.get_rect(center=self.rect.center)
+    def PAttributes():
+        print(f"Stat's logged")
+        pass
     def UpdateDamage(self):
             print(f"Damage Taken \n{EnemyDamage}")
     def update(self): #frame update !!
 #       ~ Movement, really simple for the most part, adjusting self.facing_left to assume which direction to face the character ~
         Keys = pygame.key.get_pressed()
         moving = False
-
         if Keys[pygame.K_a]:
             print("Pressed A or Left arrow")
             self.rect.move_ip(-MainSpeed,0)
@@ -123,13 +128,14 @@ class MainPlayer:
             self.rect.move_ip(MainSpeed,0)
             self.facing_left = False
             moving = True 
-        #if Keys[pygame.K_space]:
-            #print("I have attacked!")
+        if Keys[pygame.K_SPACE]:
+            print("I have attacked!")
+        if Keys[pygame.K_F1]:
+             print("The Game has been changed to playing")
         if Keys[pygame.K_o]:
             print(f"This is ur Current Player Stats,\n{MainHealth}HP\n{MainSpeed}m/s\n{MainSpread}cm\n{MainDamage}")
-         #   if GameState[2] and Keys[K_escape]: 
-           #     GameState = [1]
-        
+   #     if GameState[2] and Keys[K_escape]: 
+     #          GameState = [1] 
         # --- choose animation based on movement ---
         self.set_animation("run" if moving else "idle")  
         # --- advance animation on its own speed ---
@@ -152,20 +158,20 @@ class Enemy:
             pass
 Player = MainPlayer()
 WaveEnemies = Enemy()
+def start_game():
+    game_running = True
 
+pygame_menu.add.button('Play', game_running)
 
-while running: # every frame the stuff below is happening
+while game_running: # every frame the stuff below is happening
     # pygame.QUIT event means the user clicked X to close your window
     # GameState = [0]
     for event in pygame.event.get():
-        if event.type == pygame.QUIT: running = False
+        if event.type == pygame.QUIT: game_running = False
     
     Player.update()
     Player.draw(screen)
-
-
-
-
+    
 
     # flip() the display to put your work on screen
     pygame.display.flip()
