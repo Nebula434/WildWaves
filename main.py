@@ -42,11 +42,19 @@ tile_image = pygame.image.load(os.path.join(tile_dir,"Tilemap_color4.png"))
 water_tile = pygame.image.load(os.path.join(terrain_assests_dir, "Water Background color.png")).convert()
 # foam strip/sheet; update the filename to your asset
 water_foam_sheet = pygame.image.load(os.path.join(terrain_assests_dir, "waterfoam.png")).convert_alpha()
-BORDER_THICKNESS = 192  # ring thickness around the screen; adjust as you like
+
+BORDER_THICKNESS = 192
 TILE_SIZE = 192
 TILE_OVERLAP = 16
-TILE_STEP = TILE_SIZE - TILE_OVERLAP  # overlap for ground tiling
-
+TILE_STEP = TILE_SIZE - TILE_OVERLAP
+# land extends one tile further toward the water
+LAND_MARGIN = max(0, BORDER_THICKNESS - TILE_SIZE)
+# land rectangle used by fade and collisions
+LAND_RECT = pygame.Rect(
+    LAND_MARGIN, LAND_MARGIN,
+    SCREEN_WIDTH - 2 * LAND_MARGIN,
+    SCREEN_HEIGHT - 2 * LAND_MARGIN
+)
 def get_rect_tile(sheet, x, y, w, h):
     return sheet.subsurface(pygame.Rect(x, y, w, h)).copy()
 # Ground tile (top-left)
@@ -54,6 +62,25 @@ ground_tile = get_rect_tile(tile_image, 0 * 192, 0 * 192, 192, 192)
 
 # Top-left tile (192x192) from the tileset
 single_tile_image = get_rect_tile(tile_image, 0, 0, 192, 192)
+# DAMAGE CONSTANTS YIPPPIEEE
+WATER_DAMAGE = 2
+WATER_DAMAGE_INTERVAL_MS = 800 
+last_water_damage_ms = 0
+def touching_water(rect):
+    # Inside land?
+    if LAND_RECT.contains(rect):
+        return False
+    # In the shoreline fade band (slightly larger than land)?
+    band_rect = LAND_RECT.inflate(GROUND_FEATHER * 2, GROUND_FEATHER * 2)
+    return band_rect.colliderect(rect)
+def apply_water_damage(now_ms):
+    global MainHealth, last_water_damage_ms
+    if touching_water(Player.rect):
+        if now_ms - last_water_damage_ms >= WATER_DAMAGE_INTERVAL_MS:
+            MainHealth = max(0, MainHealth - WATER_DAMAGE)
+            last_water_damage_ms = now_ms
+            print(f"Water hurts! HP: {MainHealth}")
+
 
 # Player Stats & Health, need a better way to categorize this
 MainSpeed = 3
@@ -95,7 +122,7 @@ WIZARD_RUN_FRAMES  = 4
 WIZARD_ATTACK_FRAMES = 11  # this is also the heal frames for wizards!!
 WIZARD_CHARACTER_EFFECT_FRAMES = 11
 PLAYER_HEIGHT = 192
-PLAYER_WIDITH = 192
+PLAYER_WIDTH = PLAYER_HEIGHT
 
 #Enemy Frames for the sprites, none of these have been tested 11/10
 ENEMY_IDLE_FRAMES = 8
@@ -153,6 +180,8 @@ def tile_fill(surface, img, rect):
             surface.blit(img, (x, y))
 
 def draw_water_border():
+    WATER_OUTER_MARGIN = TILE_SIZE * 2  # adjust later
+    
     # Four border rectangles (outer to inner ring)
     top_rect    = (0, 0, SCREEN_WIDTH, BORDER_THICKNESS)
     bottom_rect = (0, SCREEN_HEIGHT - BORDER_THICKNESS, SCREEN_WIDTH, BORDER_THICKNESS)
@@ -190,33 +219,31 @@ class MainPlayer:
             self.rect = self.image.get_rect(center=self.rect.center) # image is decided again after 
     def update(self): #everything that needs to happen in each frame for character to do as they should 
 #       ~ Movement, really simple for the most part, adjusting self.facing_left to assume which direction to face the character ~
+        # precompute land bounds
+        LAND_LEFT = LAND_MARGIN
+        LAND_TOP = LAND_MARGIN
+        LAND_RIGHT = SCREEN_WIDTH - LAND_MARGIN
+        LAND_BOTTOM = SCREEN_HEIGHT - LAND_MARGIN
+        move_bounds = LAND_RECT.inflate(GROUND_FEATHER, GROUND_FEATHER)
+
         Keys = pygame.key.get_pressed()
         moving = False
-        if Keys[pygame.K_w] or Keys[pygame.K_UP]:
-            print("Pressed W or Up arrow")
-           # self.rect.move_ip(0,-MainSpeed)
-            Player.rect.y = max(Player.rect.y - MainSpeed, -100) # -100 since thats when the top part ends
+        # precompute movement bounds each update
 
+        if Keys[pygame.K_w] or Keys[pygame.K_UP]:
+            Player.rect.y = max(Player.rect.y - MainSpeed, move_bounds.top)
             moving = True
-          #  if Player.rect.y < -100:
-          #      Player.rect.y = -100
         if Keys[pygame.K_s] or Keys[pygame.K_DOWN]:
-            print("Pressed S or Down arrow")
-            #self.rect.move_ip(0,MainSpeed)
+            Player.rect.y = min(Player.rect.y + MainSpeed, move_bounds.bottom - PLAYER_HEIGHT)
             moving = True
-            Player.rect.y = min(Player.rect.y + MainSpeed, ((SCREEN_HEIGHT - PLAYER_HEIGHT)+50)) # +50 b/c the boundry cuts off early for some reason? 
         if Keys[pygame.K_a] or Keys[pygame.K_LEFT]:
-            print("Pressed A or Left arrow")
-            #self.rect.move_ip(-MainSpeed,0)
-            Player.rect.x =max(Player.rect.x - MainSpeed, -50)
+            Player.rect.x = max(Player.rect.x - MainSpeed, move_bounds.left)
             self.facing_left = True
             moving = True
         if Keys[pygame.K_d] or Keys[pygame.K_RIGHT]:
-            print("Pressed D or Right arrow")
-            #self.rect.move_ip(MainSpeed,0)
-            Player.rect.x =min(Player.rect.x + MainSpeed,((SCREEN_WIDTH - PLAYER_HEIGHT)+50))
+            Player.rect.x = min(Player.rect.x + MainSpeed, move_bounds.right - PLAYER_WIDTH)
             self.facing_left = False
-            moving = True 
+            moving = True
         if Keys[pygame.K_SPACE]:
             print("I have attacked!")
         if Keys[pygame.K_F1]:
@@ -294,16 +321,19 @@ class WaterEmitter:
         if self.active:
             surface.blit(self.frames[self.frame], (self.x, self.y))
 
+ #
+
+# More Water Code, really interesting but im not there yet 
 emitters = []
-#    ~ Water Code, need this broken down to make it easier to understand ~
+
 def init_water_emitters():
     emitters.clear()
     now = pygame.time.get_ticks()
 
-    inner_x0 = BORDER_THICKNESS
-    inner_y0 = BORDER_THICKNESS
-    inner_x1 = SCREEN_WIDTH  - BORDER_THICKNESS
-    inner_y1 = SCREEN_HEIGHT - BORDER_THICKNESS
+    inner_x0 = LAND_MARGIN
+    inner_y0 = LAND_MARGIN
+    inner_x1 = SCREEN_WIDTH  - LAND_MARGIN
+    inner_y1 = SCREEN_HEIGHT - LAND_MARGIN
 
     # top edge (emit just inside the inner edge)
     y_top = inner_y0 - FOAM_H // 2
@@ -336,6 +366,8 @@ def init_water_emitters():
             e = WaterEmitter(x_right, y, foam_rot_right, FOAM_FPS)
             e.schedule_next(now)
             emitters.append(e)
+
+# 
 
 #Super sloppy menu code
 menu = pygame_menu.Menu('Wild Waves', 600, 400, theme=pygame_menu.themes.THEME_BLUE)
@@ -378,8 +410,7 @@ def get_tile(sheet, col, row, tile_size=TILE_SIZE):
     rect = pygame.Rect(col * tile_size, row * tile_size, tile_size, tile_size)
     return sheet.subsurface(rect).copy()
 # Smooth fade from ground into water
-GROUND_FEATHER = 32  # pixels of soft fade (tweak)
-
+GROUND_FEATHER = 8
 def create_ground_surface():
     # draw all ground tiles to an off-screen surface
     surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SRCALPHA)
@@ -446,16 +477,21 @@ while game_running: # every frame the stuff below is happening
         now = pygame.time.get_ticks()
         for e in emitters:
             e.update(now)
-        # draw after water but before player
+        #screen.blit(background_image,(0,0)) # background first, color incase anything bleeds through. 
+        # draw ring of water 
         draw_water_border()
+        # 3) land (precomposed with smooth fade)
+        screen.blit(ground_surface, (0, 0))
+        #random foam animation
         for e in emitters:
             e.draw(screen)
-        #IN ORDER IS VERY IMPORTANT HERE TO ENSURE RENDERING HAPPENS IN THE CORRECT ORDER
-        screen.blit(background_image,(0,0)) # background first, color incase anything bleeds through.
-        screen.blit(ground_surface, (0, 0))  # then ground
-        draw_water_border() # water border
-        Player.update() # player.update() handles the player animation and movement, calling it first begins the animation process.
+    
+        Player.update() # player.update() handles the player animation and movement, calling it first begins the animation process. SUCH BELOW HERE HANDLES SOME COOL STUFF HEHE
+        
+        apply_water_damage(now)
         Player.draw(screen) # finally, draw the player
+        if MainHealth == 0:
+            print("I AM DEAD!")
 
     pygame.display.flip() # need this everytime to update the screen with what my code is doing
     clock.tick(60)  # FPS 60
