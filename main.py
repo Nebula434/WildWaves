@@ -24,8 +24,9 @@ clock = pygame.time.Clock()
 game_running = True
 STATE_MENU = "menu"
 STATE_GAME = "game"
+STATE_OVER = "over" # if game_state = state_over then run game over menu with score
 game_state = STATE_MENU
-GameOver = False 
+#GameOver = False 
 # When this is true -> go to game over screen 
 
 #Display Settings
@@ -43,6 +44,8 @@ water_tile = pygame.image.load(os.path.join(terrain_assests_dir, "Water Backgrou
 # foam strip/sheet; update the filename to your asset
 water_foam_sheet = pygame.image.load(os.path.join(terrain_assests_dir, "waterfoam.png")).convert_alpha()
 
+# Border constant & tile constants defined here, using these to determine the size of the tile, how much each should overlap
+#
 BORDER_THICKNESS = 192
 TILE_SIZE = 192
 TILE_OVERLAP = 16
@@ -51,28 +54,46 @@ TILE_STEP = TILE_SIZE - TILE_OVERLAP
 LAND_MARGIN = max(0, BORDER_THICKNESS - TILE_SIZE)
 # land rectangle used by fade and collisions
 LAND_RECT = pygame.Rect(
-    LAND_MARGIN, LAND_MARGIN,
+    LAND_MARGIN, 0,
     SCREEN_WIDTH - 2 * LAND_MARGIN,
-    SCREEN_HEIGHT - 2 * LAND_MARGIN
+    SCREEN_HEIGHT - LAND_MARGIN
 )
+
+
 def get_rect_tile(sheet, x, y, w, h):
     return sheet.subsurface(pygame.Rect(x, y, w, h)).copy()
-# Ground tile (top-left)
-ground_tile = get_rect_tile(tile_image, 0 * 192, 0 * 192, 192, 192)
+
+
+# Getting the desired tile from the tile_image, [0 * 192, 0 * 192,] these are determing WHERE in the image its' taken from
+# 
+ground_tile = get_rect_tile(tile_image, 2 * 192, 0 * 192, 192, 192)
+# After where is determined, the width and height is needed, aka 192,192
 
 # Top-left tile (192x192) from the tileset
 single_tile_image = get_rect_tile(tile_image, 0, 0, 192, 192)
-# DAMAGE CONSTANTS YIPPPIEEE
+
+# WATER DAMAGE CALCULATION
 WATER_DAMAGE = 2
 WATER_DAMAGE_INTERVAL_MS = 800 
 last_water_damage_ms = 0
 def touching_water(rect):
-    # Inside land?
+    """
+    Check if a rectangle is touching the water (shoreline fade band).
+    Returns True if the rect is in the water zone, False if on solid land.
+    """
+    # Step 1: If fully inside the land, definitely not touching water
     if LAND_RECT.contains(rect):
         return False
-    # In the shoreline fade band (slightly larger than land)?
-    band_rect = LAND_RECT.inflate(GROUND_FEATHER * 2, GROUND_FEATHER * 2)
-    return band_rect.colliderect(rect)
+    
+    # Step 2: Calculate the water zone (land + fade band on all sides)
+    fade_width = GROUND_FEATHER * 2  # fade extends this many pixels outward
+    water_zone = LAND_RECT.inflate(fade_width, fade_width)
+    
+    # Step 3: Check if the rect overlaps with the water zone
+    is_in_water_zone = water_zone.colliderect(rect)
+
+    return is_in_water_zone
+
 def apply_water_damage(now_ms):
     global MainHealth, last_water_damage_ms
     if touching_water(Player.rect):
@@ -80,7 +101,6 @@ def apply_water_damage(now_ms):
             MainHealth = max(0, MainHealth - WATER_DAMAGE)
             last_water_damage_ms = now_ms
             print(f"Water hurts! HP: {MainHealth}")
-
 
 # Player Stats & Health, need a better way to categorize this
 MainSpeed = 3
@@ -155,6 +175,9 @@ def load_strip(sheet, frame_w, frame_h, num_frames, spacing_x=0, margin_x=0):
         frames.append(sheet.subsurface(rect).copy())
         x += frame_w + spacing_x
     return frames
+    #
+
+
 # Foam animation config (set to your sheet)
 FOAM_W = 64
 FOAM_H = 64
@@ -199,82 +222,112 @@ def draw_water_border():
 # MainPlayer consists of all the things the player does & handles the animation within, maybe should make a animation class?
 class MainPlayer:
     def __init__(self):
-            super().__init__()
-            self.animations = animations
-            self.anim = "wizard_idle" 
-            self.frames = self.animations[self.anim]
-            self.frame_index = 0
-            self.image = self.frames[self.frame_index] # image is decided after running through which frame to pick from above
-            self.rect = self.image.get_rect(center=(640,360)) #Character is drawn here each time th game is started 
-            self.frame_delay_ms = 100          #how fast the animation runs, 10 fps
-            self.last_update_ms = pygame.time.get_ticks() 
-            self.facing_left = False
+        """Initialize player with animation and position."""
+        super().__init__()
+        self.animations = animations
+        self.anim = "wizard_idle" 
+        self.frames = self.animations[self.anim]
+        self.frame_index = 0
+        self.image = self.frames[self.frame_index]
+        self.rect = self.image.get_rect(center=(640, 360))
+        self.frame_delay_ms = 100
+        self.last_update_ms = pygame.time.get_ticks() 
+        self.facing_left = False
+    
     def set_animation(self, name):
+        """Switch to a different animation if needed."""
         if name != self.anim:
             self.anim = name
-            self.frames = self.animations[self.anim] # 
+            self.frames = self.animations[self.anim]
             self.frame_index = 0
             self.last_update_ms = pygame.time.get_ticks()
-            # keep position while swapping images
-            self.rect = self.image.get_rect(center=self.rect.center) # image is decided again after 
-    def update(self): #everything that needs to happen in each frame for character to do as they should 
-#       ~ Movement, really simple for the most part, adjusting self.facing_left to assume which direction to face the character ~
-        # precompute land bounds
-        LAND_LEFT = LAND_MARGIN
-        LAND_TOP = LAND_MARGIN
-        LAND_RIGHT = SCREEN_WIDTH - LAND_MARGIN
-        LAND_BOTTOM = SCREEN_HEIGHT - LAND_MARGIN
-        move_bounds = LAND_RECT.inflate(GROUND_FEATHER, GROUND_FEATHER)
-
-        Keys = pygame.key.get_pressed()
+            # Keep position while swapping images
+            self.rect = self.image.get_rect(center=self.rect.center)
+    
+    def _get_movement_bounds(self):
+        """Calculate the bounds within which the player can move."""
+        return LAND_RECT.inflate(GROUND_FEATHER, GROUND_FEATHER)
+    
+    def _handle_movement(self, keys):
+        """
+        Handle player movement based on keyboard input.
+        Returns True if player is moving, False otherwise.
+        """
+        move_bounds = self._get_movement_bounds()
         moving = False
-        # precompute movement bounds each update
 
-        if Keys[pygame.K_w] or Keys[pygame.K_UP]:
-            Player.rect.y = max(Player.rect.y - MainSpeed, move_bounds.top)
+        if keys[pygame.K_w] or keys[pygame.K_UP]:
+            self.rect.y = max(self.rect.y - MainSpeed, move_bounds.top)
             moving = True
-        if Keys[pygame.K_s] or Keys[pygame.K_DOWN]:
-            Player.rect.y = min(Player.rect.y + MainSpeed, move_bounds.bottom - PLAYER_HEIGHT)
+        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+            self.rect.y = min(self.rect.y + MainSpeed, move_bounds.bottom - PLAYER_HEIGHT)
             moving = True
-        if Keys[pygame.K_a] or Keys[pygame.K_LEFT]:
-            Player.rect.x = max(Player.rect.x - MainSpeed, move_bounds.left)
+        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+            self.rect.x = max(self.rect.x - MainSpeed, move_bounds.left)
             self.facing_left = True
             moving = True
-        if Keys[pygame.K_d] or Keys[pygame.K_RIGHT]:
-            Player.rect.x = min(Player.rect.x + MainSpeed, move_bounds.right - PLAYER_WIDTH)
+        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+            self.rect.x = min(self.rect.x + MainSpeed, move_bounds.right - PLAYER_WIDTH)
             self.facing_left = False
             moving = True
-        if Keys[pygame.K_SPACE]:
-            print("I have attacked!")
-        if Keys[pygame.K_F1]:
-             print("The Game has been changed to playing")
-        if Keys[pygame.K_o]:
-            print(f"This is ur Current Player Stats,\n{MainHealth}HP\n{MainSpeed}m/s\n{MainSpread}cm\n{MainDamage}")
-        if Keys[pygame.K_LSHIFT] or Keys[pygame.K_LCTRL]:
-            print(f"Dash Is Being consumed")
-            #Dash()
-
-        #Add detection on where mouse is clicked and make player face that way 
-        #Add check if been hit, if true then high light character red AND take away EnemyDamage. 
-        #Add creation of sprites to hit enemies, magic missle is the first spell to make
-
-
         
-        # Animation code i didnt make, not too sure how it works 
-        self.set_animation("wizard_run" if moving else "wizard_idle")  
+        return moving
+    
+    def _handle_input(self, keys):
+        """Handle non-movement keyboard input (actions, debug, etc.)."""
+        if keys[pygame.K_SPACE]:
+            print("I have attacked!")
+        if keys[pygame.K_F1]:
+            print("The Game has been changed to playing")
+        if keys[pygame.K_o]:
+            print(f"This is ur Current Player Stats,\n{MainHealth}HP\n{MainSpeed}m/s\n{MainSpread}cm\n{MainDamage}")
+        if keys[pygame.K_LSHIFT] or keys[pygame.K_LCTRL]:
+            print(f"Dash Is Being consumed")
+            # Dash()
+        if keys[pygame.K_F2]:
+            print(f"I am at {self.rect.x} and {self.rect.y}")
+        # TODO: Add detection on where mouse is clicked and make player face that way 
+        # TODO: Add check if been hit, if true then highlight character red AND take away EnemyDamage. 
+        # TODO: Add creation of sprites to hit enemies, magic missle is the first spell to make
+    
+    def _update_animation(self, moving):
+        """
+        Update animation frame based on movement state and timing.
+        Handles frame progression and sprite flipping.
+        """
+        # Set animation based on movement state
+        self.set_animation("wizard_run" if moving else "wizard_idle")
+        
+        # Advance frame if enough time has passed
         now = pygame.time.get_ticks()
         if now - self.last_update_ms > anim_speed_ms[self.anim]:
             self.last_update_ms = now
             self.frame_index = (self.frame_index + 1) % len(self.frames)
-        # pick current frame, then flip if needed 
+        
+        # Get current frame and flip if facing left
         self.image = self.frames[self.frame_index]
         if self.facing_left:
             self.image = pygame.transform.flip(self.image, True, False)
-        # ---- #
-
-    #draws the player
-    def draw(self, surface): # this is what is layered over the background
-        surface.blit(self.image, self.rect) # character is drawn
+    
+    def update(self):
+        """
+        Main update method called each frame.
+        Coordinates movement, input handling, and animation updates.
+        """
+        keys = pygame.key.get_pressed()
+        
+        # Handle movement and get movement state
+        moving = self._handle_movement(keys)
+        
+        # Handle other input (actions, debug keys)
+        self._handle_input(keys)
+        
+        # Update animation based on movement state
+        self._update_animation(moving)
+    
+    def draw(self, surface):
+        """Draw the player sprite to the given surface."""
+        surface.blit(self.image, self.rect)
 
 class Enemy:
       def __init__(self):
@@ -331,7 +384,7 @@ def init_water_emitters():
     now = pygame.time.get_ticks()
 
     inner_x0 = LAND_MARGIN
-    inner_y0 = LAND_MARGIN
+    inner_y0 = 0
     inner_x1 = SCREEN_WIDTH  - LAND_MARGIN
     inner_y1 = SCREEN_HEIGHT - LAND_MARGIN
 
@@ -422,9 +475,9 @@ def create_ground_surface():
     mask.fill((255, 255, 255, 0))
 
     inner = pygame.Rect(
-        BORDER_THICKNESS, BORDER_THICKNESS,
+        BORDER_THICKNESS, 0,
         SCREEN_WIDTH - 2 * BORDER_THICKNESS,
-        SCREEN_HEIGHT - 2 * BORDER_THICKNESS
+        SCREEN_HEIGHT - BORDER_THICKNESS
     )
 
     # solid center
