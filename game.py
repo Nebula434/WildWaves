@@ -11,6 +11,7 @@ enemy_dir = r"E:\Personal Projects\WildWaves\assests\Units\Red Units\Warrior"
 terrain_assests_dir = r"E:\Personal Projects\WildWaves\assests\Terrain"
 base_assests_dir = r"E:\Personal Projects\WildWaves\assests\Buildings\Blue Buildings"
 tile_dir = r"E:\Personal Projects\WildWaves\assests\Terrain\Tiles"
+title_dir = r"E:\Personal Projects\WildWaves\assests\TitleTextures"
 #
 #Display Settings
 SCREEN_WIDTH = 900
@@ -19,6 +20,10 @@ PRETTYCOLOR = ( 232, 181,189)
 # frame size for base player sheet, this is mostly the same for each sprite
 FRAME_W = 192
 FRAME_H = 192
+# frame size for Title & Menu 
+TITLEF_W = 512
+TITLEF_H = 512
+TITLE_GLIMMER_FRAMES=0
 # This for the Wizard sprites only, warriors will be seperate. ADDING WIZARD_  might fix a conflicting problem later on
 WIZARD_IDLE_FRAMES = 6
 WIZARD_RUN_FRAMES  = 4
@@ -59,8 +64,18 @@ screen = pygame.display.set_mode((SCREEN_HEIGHT, SCREEN_WIDTH))
 pygame.display.set_caption("WildWaves: Mage Mania")
 
 # Screen is made, now we can load our animations
-#Player Sprite Animation BS bro oh my fuckin god
 
+
+#loading title image
+def loadtitle_image(path,TITLEF_W,TITLEF_H):
+    titleimage = pygame.image.load(path)
+    loadedimage = titleimage
+    print("I have loaded the image")
+    return loadedimage  # adding ,TITLE_GLIMMER_FRAME would be apart of the animation code later on.
+
+
+
+#Handling animation for each sprite
 def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margin_x=0): # animation helper 
     sheet = pygame.image.load(path).convert_alpha()
     frames = []
@@ -71,7 +86,14 @@ def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margi
         frames.append(sheet.subsurface(rect).copy())
         x += frame_w + spacing_x
     return frames
+#Each animation is loaded in a list and attached to a string, 
 
+
+images = {
+    "title_image": loadtitle_image(os.path.join(title_dir,"title_placeholder.png"),TITLEF_W, TITLEF_H)
+
+# TODO: Each sprite is gonna be different later on im pretty sure, adjust FRAME_W and FRAME_H instead of being a const. const -> variable
+}
 animations = {
     "wizard_idle": load_animation(os.path.join(wizard_dir, "Idle.png"), FRAME_W, FRAME_H, WIZARD_IDLE_FRAMES),
     "wizard_run" : load_animation(os.path.join(wizard_dir, "Run.png"),  FRAME_W, FRAME_H, WIZARD_RUN_FRAMES),
@@ -79,17 +101,29 @@ animations = {
     "enemy_run": load_animation(os.path.join(enemy_dir, "Warrior_Run.png"), FRAME_W, FRAME_H, ENEMY_RUN_FRAMES),
     "enemy_attack1": load_animation(os.path.join(enemy_dir, "Warrior_Attack1.png"), FRAME_W, FRAME_H, ENEMY_ATTACK_FRAMES),
     "enemy_attack2": load_animation(os.path.join(enemy_dir, "Warrior_Attack2.png"), FRAME_W, FRAME_H, ENEMY_ATTACK_FRAMES),
+  #  "title_glimmer": load_animation(os.path.join(title_dir,title_glimmer.png),TITLEF_W, TITLEF_H, TITLE_GLIMMER_FRAMES)
+  #TODO:
+  #Create animated Picture, roughly 16 frames? It says Wild Waves, Wild as Greenery, Waves as an ocean-like bubbly text. the water would flow for the animation 
+  #Create title_glimmer.png & title_dir 
+  #Create TITLEF_W, TITLEF_H, TITLE_GLIMMER_FRAMES const 
+  #
+  #
+
+  #
 }
 
-anim_speed_ms = {
+# Animation Speed - Higher = Slower Animation, Lower = Faster Animation
+anim_speed_ms = { 
     "wizard_idle": 100,   # ~10 FPS
     "wizard_run" : 70,    # ~14 FPS (snappier)
     "enemy_idle" : 100,
     "enemy_run" : 70,
     "enemy_attack1" : 50,
     "enemy_attack2" : 60,
+  #  "title_glimmer" : 80 # fps for title
+
 }
-#Player Animation End
+#
 
 
 #End of animation code
@@ -118,8 +152,8 @@ class MainPlayer:
             # Keep position while swapping images
             self.rect = self.image.get_rect(center=self.rect.center)
     
-   # def _get_movement_bounds(self):
-   #     """Calculate the bounds within which the player can move."""
+    # def _get_movement_bounds(self):
+    #     """Calculate the bounds within which the player can move."""
     #    return LAND_RECT.inflate(GROUND_FEATHER, GROUND_FEATHER)
     
     def _handle_movement(self, keys):
@@ -202,8 +236,100 @@ class MainPlayer:
         """Draw the player sprite to the given surface."""
         surface.blit(self.image, self.rect)
 #
-Player = MainPlayer()
+class MainMenu: 
+    def __init__(self):
+        self.title = "title_image"
+        self.image = self.title
+      #  self.rect = self.image.get_rect()
+        self._create_buttons()  # Initialize buttons when menu is created
 
+    def title_image(self, name): # animation of game title handled here
+         
+        pass
+    
+    def _create_buttons(self):
+        """Initialize the menu buttons (Play, Load, Quit)."""
+        # Button dimensions - using constants to avoid magic numbers
+        button_width = 200
+        button_height = 60
+        button_spacing = 80  # Space between buttons
+        
+        # Calculate starting y position to center buttons vertically
+        start_y = SCREEN_HEIGHT // 2
+        button_x = (SCREEN_WIDTH - button_width) // 2  # Center horizontally
+        
+        # Create button list with their positions and text
+        self.buttons = []
+        button_texts = ["Play", "Load", "Quit"]
+        
+        for index, text in enumerate(button_texts):
+            button_y = start_y + (index * (button_height + button_spacing))
+            button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+            self.buttons.append({
+                "text": text,
+                "rect": button_rect,
+                "hovered": False
+            })
+    
+    def _check_button_hover(self, mouse_pos):
+        """Check if mouse is hovering over any button and update hover state."""
+        for button in self.buttons:
+            button["hovered"] = button["rect"].collidepoint(mouse_pos)
+    
+    def _handle_button_click(self, mouse_pos):
+        """Handle button clicks and return the action to perform."""
+        for button in self.buttons:
+            if button["rect"].collidepoint(mouse_pos):
+                return button["text"]
+        return None
+    
+    def _draw_buttons(self, surface):
+        """Draw all menu buttons with hover effects."""
+        for button in self.buttons:
+            # Choose color based on hover state
+            if button["hovered"]:
+                button_color = (100, 150, 200)  # Lighter blue when hovered
+            else:
+                button_color = (50, 100, 150)  # Darker blue when not hovered
+            
+            # Draw button rectangle
+            pygame.draw.rect(surface, button_color, button["rect"])
+            pygame.draw.rect(surface, (0, 0, 0), button["rect"], 3)  # Black border
+            
+            # Draw button text
+            font = pygame.font.Font(None, 36)
+            text_surface = font.render(button["text"], True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=button["rect"].center)
+            surface.blit(text_surface, text_rect)
+    
+    def _draw_title(self, surface):
+        """Draw the game title image."""
+        if self.title in images:
+            title_image = images[self.title]
+            title_x = (SCREEN_WIDTH - title_image.get_width()) // 2
+            title_y = 100  # Position title near top of screen
+            surface.blit(title_image, (title_x, title_y))
+    
+    def handle_event(self, event):
+        """Handle menu events (mouse clicks, hover)."""
+        if event.type == pygame.MOUSEMOTION:
+            self._check_button_hover(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Left mouse button
+                return self._handle_button_click(event.pos)
+        return None
+    
+    def draw(self, surface):
+        """Draw the entire main menu (title and buttons)."""
+        self._draw_title(surface)
+        self._draw_buttons(surface)
+
+Player = MainPlayer()
+Menu1 = MainMenu()
+
+# Game state management
+# "menu" = showing main menu, "playing" = game is active
+game_state = "menu"
 
 # Game loop
 running = True
@@ -212,15 +338,34 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-    
-    # Update player state, this handles movement, animation, input etc. 
-    Player.update()
+        elif game_state == "menu":
+            # Handle menu events (button clicks, hover)
+            action = Menu1.handle_event(event)
+            if action == "Play":
+                game_state = "playing"
+            elif action == "Quit":
+                running = False
+            # "Load" button can be handled later when save/load is implemented
+        elif game_state == "playing":
+            # Handle game events (like Escape to return to menu)
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    game_state = "menu"
+    #TODO: once enemies & projectiles are added, ensure pressing this freezes everything!!!
+
     
     # Clear screen ensures no ghosting is happening 
     screen.fill(PRETTYCOLOR)
     
-    # Draw Player onto screen
-    Player.draw(screen)
+    # Update and draw based on current game state
+    if game_state == "menu":
+        # Draw the main menu
+        Menu1.draw(screen)
+    elif game_state == "playing":
+        # Update player state, this handles movement, animation, input etc. 
+        Player.update()
+        # Draw Player onto screen
+        Player.draw(screen)
     
     # Update display
     pygame.display.update()
