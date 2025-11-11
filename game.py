@@ -3,7 +3,9 @@ import pygame, sys
 from pygame.locals import *
 import pygame_menu
 import random 
-import os 
+import os
+
+
 # directories 
 wizard_dir = r"E:/Personal Projects/WildWaves/assests/Units/Blue Units/Monk"
 warrior_dir = r"E:/Personal Projects/WildWaves/assests/Units/Blue Units/Warrior"
@@ -17,6 +19,12 @@ title_dir = r"E:\Personal Projects\WildWaves\assests\TitleTextures"
 SCREEN_WIDTH = 900
 SCREEN_HEIGHT = 900
 PRETTYCOLOR = ( 232, 181,189)
+#Border Constants
+NEGATIVE_X_BORDER = -2500
+NEGATIVE_Y_BORDER = -500
+POSITIVE_X_BORDER = 2500
+POSITIVE_Y_BORDER = 2500
+
 # frame size for base player sheet, this is mostly the same for each sprite
 FRAME_W = 192
 FRAME_H = 192
@@ -31,23 +39,25 @@ WIZARD_ATTACK_FRAMES = 11  # this is also the heal frames for wizards!!
 WIZARD_CHARACTER_EFFECT_FRAMES = 11
 PLAYER_HEIGHT = 192
 PLAYER_WIDTH = PLAYER_HEIGHT
-
 #Enemy Frames for the sprites, none of these have been tested 11/10
 ENEMY_IDLE_FRAMES = 8
 ENEMY_RUN_FRAMES = 6
 ENEMY_ATTACK_FRAMES = 4
 ENEMY_RETURNATTACK_FRAMES = 4
-# Intial Player Constants
-PLAYER_SPEED = 5
-PLAYER_HEALTH = 20
-PLAYER_DAMAGE = 3
-PLAYER_RANGE = 50
-#compat code
-PlayerNewSpeed = PLAYER_SPEED
-PlayerNewHealth = PLAYER_HEALTH
-PlayerNewRange = PLAYER_RANGE
-PlayerNewDamage = PLAYER_DAMAGE
+# Player Values, 
+PSpeed = 5
+PHealth = 20
+PAttackDmg = 3
+PReach = 50
+# Base Constants 
+BASE_HEALTH = 30
+BaseHealth = BASE_HEALTH
+#Enemy values
+ESpeed = 3.8
+EHealth = 12
+EAttackDmg = 5
 
+#
 
 
 
@@ -66,7 +76,7 @@ pygame.display.set_caption("WildWaves: Mage Mania")
 # Screen is made, now we can load our animations
 
 
-#loading title image
+#loading title image - made this after looking at load_animation() for a very long time.
 def loadtitle_image(path,TITLEF_W,TITLEF_H):
     titleimage = pygame.image.load(path)
     loadedimage = titleimage
@@ -75,25 +85,35 @@ def loadtitle_image(path,TITLEF_W,TITLEF_H):
 
 
 
-#Handling animation for each sprite
-def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margin_x=0): # animation helper 
+#Handling animation for each sprite - after looking over this for a couple days im starting to understand it.
+
+def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margin_x=0): # animation helper
+    # animation worker, works as such, we create the following variables in the function parameters above 
     sheet = pygame.image.load(path).convert_alpha()
+    #here is where we are creating the animation sheet, at this point we ONLY have the whole row out
     frames = []
-    x = margin_x
-    y = row * frame_h
+    #here we make the list of the frames, keeping tabs of what frame we are on
+    print(f"Animation active, current {frames[0]}")
+    x = margin_x # this is how we determine which frame to be on, (16,16) would be frame[0] , (32,16) would be frame [2 at this point]
+    y = row * frame_h # if we had different animations under this png,this code might break. 
     for _ in range(num_frames):
         rect = pygame.Rect(x, y, frame_w, frame_h)
         frames.append(sheet.subsurface(rect).copy())
         x += frame_w + spacing_x
     return frames
+    # the for loop has finished, are frame would be as such for reference
+    # look at wizard_idle.png for exact refrence
+    # (16,16) would be frame[0] , (32,16) would be frame [2] etc.
 #Each animation is loaded in a list and attached to a string, 
 
 
 images = {
     "title_image": loadtitle_image(os.path.join(title_dir,"title_placeholder.png"),TITLEF_W, TITLEF_H)
+    "gameover": loadtitle_image(os.path.join(title_dir,"gameover_placeholder.png"), TITLEF_W, TITLEF_H)
 
 # TODO: Each sprite is gonna be different later on im pretty sure, adjust FRAME_W and FRAME_H instead of being a const. const -> variable
 }
+
 animations = {
     "wizard_idle": load_animation(os.path.join(wizard_dir, "Idle.png"), FRAME_W, FRAME_H, WIZARD_IDLE_FRAMES),
     "wizard_run" : load_animation(os.path.join(wizard_dir, "Run.png"),  FRAME_W, FRAME_H, WIZARD_RUN_FRAMES),
@@ -127,6 +147,68 @@ anim_speed_ms = {
 
 
 #End of animation code
+#Camera Code
+class PlayerCamera:
+    """
+    Camera class that follows the player.
+    
+    Concept: The camera represents a "window" into the game world. When the player
+    moves, the camera follows them so the player stays centered on screen. When drawing
+    sprites, we subtract the camera position to convert world coordinates to screen coordinates.
+    """
+    def __init__(self):
+        """Initialize camera at position (0, 0) - top-left corner of the world."""
+        self.x = 0  # Camera's x position in the world
+        self.y = 0  # Camera's y position in the world
+    
+    def update(self, target_rect):
+        """
+        Update camera position to follow the target (usually the player).
+        Args:
+            target_rect: pygame.Rect of the object to follow (player's rect)
+        """
+        # Get the center of the target (player)
+        target_center_x = target_rect.centerx
+        target_center_y = target_rect.centery
+        
+        # Center the camera on the target
+        # Camera position = target position - half screen size
+        self.x = target_center_x - SCREEN_WIDTH // 2
+        self.y = target_center_y - SCREEN_HEIGHT // 2
+    
+    def apply(self, rect):
+        """
+        Convert world coordinates to screen coordinates.
+        
+        Args:
+            rect: pygame.Rect in world coordinates
+        
+        Returns:
+            pygame.Rect: A new rect positioned for screen drawing
+        Concept: To draw something at world position (x, y), we subtract the camera
+        position to get where it should appear on screen.
+        """
+        return rect.move(-self.x, -self.y)
+    
+    def get_offset(self):
+        """
+        Get the camera offset as a tuple (x, y).
+        Useful for manual position calculations.
+        
+        Returns:
+            tuple: (camera_x, camera_y) offset values
+        """
+        return (self.x, self.y)
+    
+
+
+
+
+
+
+
+#
+
 #Player Code
 class MainPlayer:
     def __init__(self):
@@ -151,50 +233,58 @@ class MainPlayer:
             self.last_update_ms = pygame.time.get_ticks()
             # Keep position while swapping images
             self.rect = self.image.get_rect(center=self.rect.center)
-    
-    # def _get_movement_bounds(self):
-    #     """Calculate the bounds within which the player can move."""
-    #    return LAND_RECT.inflate(GROUND_FEATHER, GROUND_FEATHER)
-    
+
     def _handle_movement(self, keys):
         """
         Handle player movement based on keyboard input.
         Returns True if player is moving, False otherwise.
+        
+        Concept: After applying movement, we clamp the player's position to ensure
+        the entire sprite stays within the world boundaries defined by the border constants.
         """
         moving = False
-        
+        # Apply movement based on key input
         if keys[pygame.K_w] or keys[pygame.K_UP]:
-            self.rect.y = max(self.rect.y - PlayerNewSpeed, 0)
+            self.rect.y -= PSpeed
             moving = True
         if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            self.rect.y = min(self.rect.y + PlayerNewSpeed, SCREEN_HEIGHT - self.rect.height)
+            self.rect.y += PSpeed
             moving = True
         if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            self.rect.x = max(self.rect.x - PlayerNewSpeed, 0)
+            self.rect.x -= PSpeed
             self.facing_left = True
             moving = True
         if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            self.rect.x = min(self.rect.x + PlayerNewSpeed, SCREEN_WIDTH - self.rect.width)
+            self.rect.x += PSpeed
             self.facing_left = False
             moving = True
         
+        # Clamp player position to stay within world boundaries
+        # We subtract PLAYER_WIDTH/HEIGHT to ensure the entire sprite stays within bounds
+        self.rect.x = max(NEGATIVE_X_BORDER, min(POSITIVE_X_BORDER - PLAYER_WIDTH, self.rect.x))
+        self.rect.y = max(NEGATIVE_Y_BORDER, min(POSITIVE_Y_BORDER - PLAYER_HEIGHT, self.rect.y))
+        
+        # max X and Y values player can go. (2308,2308) and (-2500,-500)
+        #TODO: recenter the player at the middle value of this 
+
         return moving
-    
     def _handle_input(self, keys):
         """Handle non-movement keyboard input (actions, debug, etc.)."""
         if keys[pygame.K_SPACE]:
             print("I have attacked!")
+           # print(f"Ouch! I've taken {EAttackDmg} I am now at {PHealth}")
         if keys[pygame.K_F1]:
             print("The Game has been changed to playing")
         if keys[pygame.K_o]:
-            print(f"This is ur Current Player Stats,\n{PlayerNewHealth}HP\n{PlayerNewSpeed}m/s\n{PlayerNewRange}cm\n{PlayerNewDamage}")
+            print(f"This is ur Current Player Stats,\n{PHealth}HP\n{PSpeed}m/s\n{PAttackDmg}")
         if keys[pygame.K_LSHIFT] or keys[pygame.K_LCTRL]:
             print(f"Dash Is Being consumed")
             # Dash()
         if keys[pygame.K_F2]:
-            print(f"I am at {self.rect.x} and {self.rect.y}")
+            print(f"Player is at {self.rect.x} and {self.rect.y}")
+            print(f"The cursor is at ")
         # TODO: Add detection on where mouse is clicked and make player face that way 
-        # TODO: Add check if been hit, if true then highlight character red AND take away EnemyDamage. 
+        # TODO: Add check if been hit, if true then highlight character red AND take away subtract Damage from PlayerHealth 
         # TODO: Add creation of sprites to hit enemies, magic missle is the first spell to make
     
     def _update_animation(self, moving):
@@ -232,9 +322,21 @@ class MainPlayer:
         # Update animation based on movement state
         self._update_animation(moving)
     
-    def draw(self, surface):
-        """Draw the player sprite to the given surface."""
-        surface.blit(self.image, self.rect)
+    def draw(self, surface, camera=None):
+        """
+        Draw the player sprite to the given surface.
+        
+        Args:
+            surface: The pygame surface to draw on
+            camera: Optional PlayerCamera instance. If provided, applies camera offset.
+        """
+        if camera:
+            # Apply camera offset to convert world position to screen position
+            screen_rect = camera.apply(self.rect)
+            surface.blit(self.image, screen_rect)
+        else:
+            # Draw without camera (for menu or fixed positions)
+            surface.blit(self.image, self.rect)
 #
 class MainMenu: 
     def __init__(self):
@@ -326,9 +428,10 @@ class MainMenu:
 
 Player = MainPlayer()
 Menu1 = MainMenu()
+Camera = PlayerCamera()
 
 # Game state management
-# "menu" = showing main menu, "playing" = game is active
+# "menu" = showing main menu, "playing" = game is active, "gameover" = game over screen, only met once player health or base health = 0
 game_state = "menu"
 
 # Game loop
@@ -348,12 +451,18 @@ while running:
             # "Load" button can be handled later when save/load is implemented
         elif game_state == "playing":
             # Handle game events (like Escape to return to menu)
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    game_state = "menu"
+            if event.type == pygame.KEYDOWN:  # checks if a key is pressed down
+                if event.key == pygame.K_ESCAPE: #  checks if the key is the escape key
+                    game_state = "menu" # executes code if the escape key is pressed
+            if event.type == pygame.KEYDOWN:  # checks if a key is pressed down
+                if event.key == pygame.K_F4: #  checks if the key is the escape key
+                    PHealth -= EAttackDmg
+                    print(f"Ouch! I've taken {EAttackDmg} I am now at {PHealth}")
+            if PHealth <= 0 or BaseHealth <= 0:
+                game_state = "over"
     #TODO: once enemies & projectiles are added, ensure pressing this freezes everything!!!
 
-    
+
     # Clear screen ensures no ghosting is happening 
     screen.fill(PRETTYCOLOR)
     
@@ -361,12 +470,22 @@ while running:
     if game_state == "menu":
         # Draw the main menu
         Menu1.draw(screen)
+        
     elif game_state == "playing":
         # Update player state, this handles movement, animation, input etc. 
         Player.update()
-        # Draw Player onto screen
-        Player.draw(screen)
-    
+        # Update camera to follow the player
+        Camera.update(Player.rect)
+        # Draw Player onto screen with camera offset
+        Player.draw(screen, Camera)
+    if game_state == "over":
+        print("Game Over Screen is Drawn")
+        #pygame.time.wait(10)
+        game_state == "menu"
+        #TODO: Add score function right here
+        #Draw the menu
+        Menu1.draw(screen)
+        Menu1.handle_event(event)
     # Update display
     pygame.display.update()
     
