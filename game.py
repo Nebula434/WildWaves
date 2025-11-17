@@ -1,9 +1,10 @@
 #
-import pygame, sys
+import pygame
 from pygame.locals import *
 import pygame_menu
 import random 
 import os
+import sys 
 
 
 # directories 
@@ -24,6 +25,14 @@ NEGATIVE_X_BORDER = -2500
 NEGATIVE_Y_BORDER = -500
 POSITIVE_X_BORDER = 2500
 POSITIVE_Y_BORDER = 2500
+#COLORS WOOO
+BLUE = (0,0,255)
+OBSTACLE_COLOR = (70, 120, 180)
+OBSTACLE_COLLIDE_COLOR = (220, 80, 80)
+#Obstacle constants
+OBSTACLE_COUNT = 16
+OBSTACLE_SIZE = 25
+
 
 # frame size for base player sheet, this is mostly the same for each sprite
 FRAME_W = 192
@@ -44,6 +53,23 @@ ENEMY_IDLE_FRAMES = 8
 ENEMY_RUN_FRAMES = 6
 ENEMY_ATTACK_FRAMES = 4
 ENEMY_RETURNATTACK_FRAMES = 4
+#Small Enemy Constants
+S_ENEMYDMG = 5
+S_ENEMYHEALTH = 13
+S_ENEMYSPAWNCAP = 100
+#Medium Enemy Constants
+M_ENEMYDMG = 8
+M_ENEMYHEALTH = 30
+M_ENEMYSPAWNCAP = 75
+#Large Enemy Constants
+L_ENEMYDMG = 20
+L_ENEMYHEALTH = 75
+L_ENEMYSPAWNCAP = 20
+#Boss Enemy Constant
+BOSS_HEALTH = 500
+BOSS_DAMAGE = 45
+
+
 # Player Values, 
 PSpeed = 5
 PHealth = 20
@@ -58,9 +84,26 @@ EHealth = 12
 EAttackDmg = 5
 
 #
+#Test Code For Collision 
+obstacles = []
+for _ in range(OBSTACLE_COUNT):
+    obstacle_rect = pygame.Rect(
+        random.randint(0,500),
+        random.randint(0,300),
+        OBSTACLE_SIZE,
+        OBSTACLE_SIZE
+    )
+    obstacle_mask = pygame.Mask(obstacle_rect.size, True)
+    obstacles.append({
+        "rect": obstacle_rect,
+        "mask": obstacle_mask
+    })
 
 
 
+
+
+#
 
 #Set constants prior to this
 #
@@ -93,7 +136,7 @@ def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margi
     #here is where we are creating the animation sheet, at this point we ONLY have the whole row out
     frames = []
     #here we make the list of the frames, keeping tabs of what frame we are on
-    print(f"Animation active, current {frames[0]}")
+   # print(f"Animation active, current {frames[:]}")
     x = margin_x # this is how we determine which frame to be on, (16,16) would be frame[0] , (32,16) would be frame [2 at this point]
     y = row * frame_h # if we had different animations under this png,this code might break. 
     for _ in range(num_frames):
@@ -109,8 +152,7 @@ def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margi
 
 images = {
     "title_image": loadtitle_image(os.path.join(title_dir,"title_placeholder.png"),TITLEF_W, TITLEF_H)
-    "gameover": loadtitle_image(os.path.join(title_dir,"gameover_placeholder.png"), TITLEF_W, TITLEF_H)
-
+   # "gameover": loadtitle_image(os.path.join(title_dir,"gameover_placeholder.png"), TITLEF_W, TITLEF_H)
 # TODO: Each sprite is gonna be different later on im pretty sure, adjust FRAME_W and FRAME_H instead of being a const. const -> variable
 }
 
@@ -201,18 +243,12 @@ class PlayerCamera:
         return (self.x, self.y)
     
 
-
-
-
-
-
-
 #
 
 #Player Code
 class MainPlayer:
     def __init__(self):
-        """Initialize player with animation and position."""
+        """Initializeanimation and position."""
         super().__init__()
         self.animations = animations
         self.anim = "wizard_idle" 
@@ -223,7 +259,13 @@ class MainPlayer:
         self.frame_delay_ms = 100
         self.last_update_ms = pygame.time.get_ticks() 
         self.facing_left = False
-    
+        self._refresh_mask()
+
+    def _refresh_mask(self):
+        """Update the collision mask to match the current sprite image."""
+        self.player_mask = pygame.mask.from_surface(self.image)
+        self.mask_image = self.player_mask.to_surface()
+        """Pygame collision's seem MUCH simpler than Unity..."""
     def set_animation(self, name):
         """Switch to a different animation if needed."""
         if name != self.anim:
@@ -237,7 +279,6 @@ class MainPlayer:
     def _handle_movement(self, keys):
         """
         Handle player movement based on keyboard input.
-        Returns True if player is moving, False otherwise.
         
         Concept: After applying movement, we clamp the player's position to ensure
         the entire sprite stays within the world boundaries defined by the border constants.
@@ -258,6 +299,7 @@ class MainPlayer:
             self.rect.x += PSpeed
             self.facing_left = False
             moving = True
+
         
         # Clamp player position to stay within world boundaries
         # We subtract PLAYER_WIDTH/HEIGHT to ensure the entire sprite stays within bounds
@@ -265,7 +307,7 @@ class MainPlayer:
         self.rect.y = max(NEGATIVE_Y_BORDER, min(POSITIVE_Y_BORDER - PLAYER_HEIGHT, self.rect.y))
         
         # max X and Y values player can go. (2308,2308) and (-2500,-500)
-        #TODO: recenter the player at the middle value of this 
+        #TODO: When player presses Play, Set them to infront of where home is 
 
         return moving
     def _handle_input(self, keys):
@@ -283,6 +325,9 @@ class MainPlayer:
         if keys[pygame.K_F2]:
             print(f"Player is at {self.rect.x} and {self.rect.y}")
             print(f"The cursor is at ")
+        if keys[pygame.K_F3]:
+            Enemy.admin_move(speed=ESpeed)
+            print("I have moved the enemy!")
         # TODO: Add detection on where mouse is clicked and make player face that way 
         # TODO: Add check if been hit, if true then highlight character red AND take away subtract Damage from PlayerHealth 
         # TODO: Add creation of sprites to hit enemies, magic missle is the first spell to make
@@ -305,6 +350,7 @@ class MainPlayer:
         self.image = self.frames[self.frame_index]
         if self.facing_left:
             self.image = pygame.transform.flip(self.image, True, False)
+        self._refresh_mask()
     
     def update(self):
         """
@@ -334,10 +380,119 @@ class MainPlayer:
             # Apply camera offset to convert world position to screen position
             screen_rect = camera.apply(self.rect)
             surface.blit(self.image, screen_rect)
+            screen.blit(self.mask_image,(0,0))
         else:
             # Draw without camera (for menu or fixed positions)
             surface.blit(self.image, self.rect)
 #
+#Enemy Code & Logic
+class ZEnemy:
+    def __init__(self):
+        """Initialize player with animation and position."""
+        super().__init__()
+        self.animations = animations
+        self.anim = "enemy_idle" 
+        self.frames = self.animations[self.anim]
+        self.frame_index = 0
+        self.image = self.frames[self.frame_index]
+        self.rect = self.image.get_rect(center=(0, 0))
+        self.frame_delay_ms = 100
+        self.last_update_ms = pygame.time.get_ticks() 
+        self.facing_left = False
+        self._is_moving = False
+        self._refresh_mask()
+
+    def _refresh_mask(self):
+        """Align the collision mask with the current animation frame."""
+        self.enemy_mask = pygame.mask.from_surface(self.image)
+
+    def set_animation(self, name):
+        """Switch to a different animation if needed."""
+        if name != self.anim:
+            self.anim = name
+            self.frames = self.animations[self.anim]
+            self.frame_index = 0
+            self.last_update_ms = pygame.time.get_ticks()
+            # Keep position while swapping images
+            self.rect = self.image.get_rect(center=self.rect.center)
+    def admin_move(self, speed=ESpeed):
+        """Debug helper to nudge the enemy horizontally."""
+        if speed == 0:
+            moving = False
+        else:
+            self.rect.x += speed
+            self.facing_left = speed < 0
+            moving = True
+        self._is_moving = moving
+
+
+    
+    #TODO: Since enemy is not moving, no animation will play. 
+
+    #TODO: Collision Code 
+    #NOTE: If Enemy is Colliding with player, Enemy should perform a basic melee attack.
+    #NOTE: Secondly, if Enemy is within 50 pxls of player, it shoots a projectile
+    def collision(self):
+
+        pass   
+       
+       
+        #TODO: Enemy damage code
+    def Damage(self):
+        pass
+    
+    def _update_animation(self, moving):
+        """
+        Update animation frame based on movement state and timing.
+        Handles frame progression and sprite flipping.
+        """
+        # Set animation based on movement state
+        self.set_animation("enemy_run" if moving else "enemy_idle")
+        
+        # Advance frame if enough time has passed
+        now = pygame.time.get_ticks()
+        if now - self.last_update_ms > anim_speed_ms[self.anim]:
+            self.last_update_ms = now
+            self.frame_index = (self.frame_index + 1) % len(self.frames)
+        
+        # Get current frame and flip if facing left
+        self.image = self.frames[self.frame_index]
+        if self.facing_left:
+            self.image = pygame.transform.flip(self.image, True, False)
+        self._refresh_mask()
+
+
+    def update(self):
+        
+        self._update_animation(self._is_moving)
+        self._is_moving = False
+        
+
+
+
+    def draw(self, surface, camera=None):
+        # Always draw in world space using camera offset.
+        # If no camera is provided, fall back to the global Camera instance.
+        active_camera = camera if camera is not None else Camera if 'Camera' in globals() else None
+        if active_camera:
+            screen_rect = active_camera.apply(self.rect)
+            surface.blit(self.image, screen_rect)
+        else:
+            surface.blit(self.image, self.rect)
+#
+#Map Drawing 
+#TODO: Draw Map on screen, create some trees or other foilage to liven up world
+#NOTE: Keep code compitable with drawing a border around for water or cliffs.
+class Map:
+    def loadmap(self):
+        
+        
+        pass
+    
+    pass
+
+#
+#Menu Code
 class MainMenu: 
     def __init__(self):
         self.title = "title_image"
@@ -427,6 +582,7 @@ class MainMenu:
         self._draw_buttons(surface)
 
 Player = MainPlayer()
+Enemy = ZEnemy()
 Menu1 = MainMenu()
 Camera = PlayerCamera()
 
@@ -474,10 +630,33 @@ while running:
     elif game_state == "playing":
         # Update player state, this handles movement, animation, input etc. 
         Player.update()
+       # Enemy.update()
         # Update camera to follow the player
         Camera.update(Player.rect)
         # Draw Player onto screen with camera offset
         Player.draw(screen, Camera)
+
+
+
+
+        player_hit_obstacle = False
+        for obstacle in obstacles:
+            obstacle_rect = obstacle["rect"]
+            offset = (obstacle_rect.x - Player.rect.x, obstacle_rect.y - Player.rect.y)
+            has_collided = Player.player_mask.overlap(obstacle["mask"], offset) is not None
+            color = OBSTACLE_COLLIDE_COLOR if has_collided else OBSTACLE_COLOR
+            if has_collided:
+                player_hit_obstacle = True
+            screen_rect = Camera.apply(obstacle_rect)
+            pygame.draw.rect(screen, color, screen_rect)
+
+        if player_hit_obstacle:
+            print("Player collided with an obstacle.")
+
+
+        
+        Enemy.update()
+        Enemy.draw(screen)
     if game_state == "over":
         print("Game Over Screen is Drawn")
         #pygame.time.wait(10)
