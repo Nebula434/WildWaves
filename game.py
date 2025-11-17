@@ -120,9 +120,9 @@ pygame.display.set_caption("WildWaves: Mage Mania")
 
 
 #loading title image - made this after looking at load_animation() for a very long time.
-def loadtitle_image(path,TITLEF_W,TITLEF_H):
-    titleimage = pygame.image.load(path)
-    loadedimage = titleimage
+def load_image(path,TITLEF_W,TITLEF_H):
+    image = pygame.image.load(path)
+    loadedimage = image
     print("I have loaded the image")
     return loadedimage  # adding ,TITLE_GLIMMER_FRAME would be apart of the animation code later on.
 
@@ -151,8 +151,8 @@ def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margi
 
 
 images = {
-    "title_image": loadtitle_image(os.path.join(title_dir,"title_placeholder.png"),TITLEF_W, TITLEF_H)
-   # "gameover": loadtitle_image(os.path.join(title_dir,"gameover_placeholder.png"), TITLEF_W, TITLEF_H)
+    "title_image": load_image(os.path.join(title_dir,"title_placeholder.png"),TITLEF_W, TITLEF_H),
+    "gameover_image": load_image(os.path.join(title_dir,"gameover_title.png"), TITLEF_W, TITLEF_H)
 # TODO: Each sprite is gonna be different later on im pretty sure, adjust FRAME_W and FRAME_H instead of being a const. const -> variable
 }
 
@@ -266,6 +266,8 @@ class MainPlayer:
         self.player_mask = pygame.mask.from_surface(self.image)
         self.mask_image = self.player_mask.to_surface()
         """Pygame collision's seem MUCH simpler than Unity..."""
+
+
     def set_animation(self, name):
         """Switch to a different animation if needed."""
         if name != self.anim:
@@ -580,10 +582,100 @@ class MainMenu:
         """Draw the entire main menu (title and buttons)."""
         self._draw_title(surface)
         self._draw_buttons(surface)
+class GameOverMenu:
+    def __init__(self):
+        self.title = "gameover_image"
+        self.image = self.title
+      #  self.rect = self.image.get_rect()
+        self._create_buttons()  # Initialize buttons when menu is created
+
+    def title_image(self, name): # animation of game title handled here
+         
+        pass
+    
+    def _create_buttons(self):
+        """Initialize the menu buttons"""
+        # Button dimensions - using constants to avoid magic numbers
+        button_width = 200
+        button_height = 60
+        button_spacing = 80  # Space between buttons
+        
+        # Calculate starting y position to center buttons vertically
+        start_y = SCREEN_HEIGHT // 2
+        button_x = (SCREEN_WIDTH - button_width) // 2  # Center horizontally
+        
+        # Create button list with their positions and text
+        self.buttons = []
+        button_texts = ["Retry", "Save Run", "Quit like a Pleb!"]
+        
+        for index, text in enumerate(button_texts):
+            button_y = start_y + (index * (button_height + button_spacing))
+            button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+            self.buttons.append({
+                "text": text,
+                "rect": button_rect,
+                "hovered": False
+            })
+    
+    def _check_button_hover(self, mouse_pos):
+        """Check if mouse is hovering over any button and update hover state."""
+        for button in self.buttons:
+            button["hovered"] = button["rect"].collidepoint(mouse_pos)
+    
+    def _handle_button_click(self, mouse_pos):
+        """Handle button clicks and return the action to perform."""
+        for button in self.buttons:
+            if button["rect"].collidepoint(mouse_pos):
+                return button["text"]
+        return None
+    
+    def _draw_buttons(self, surface):
+        """Draw all menu buttons with hover effects."""
+        for button in self.buttons:
+            # Choose color based on hover state
+            if button["hovered"]:
+                button_color = (100, 150, 200)  # Lighter blue when hovered
+            else:
+                button_color = (50, 100, 150)  # Darker blue when not hovered
+            
+            # Draw button rectangle
+            pygame.draw.rect(surface, button_color, button["rect"])
+            pygame.draw.rect(surface, (0, 0, 0), button["rect"], 3)  # Black border
+            
+            # Draw button text
+            font = pygame.font.Font(None, 36)
+            text_surface = font.render(button["text"], True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=button["rect"].center)
+            surface.blit(text_surface, text_rect)
+    
+    def _draw_title(self, surface):
+        """Draw the game title image."""
+        if self.title in images:
+            title_image = images[self.title]
+            title_x = (SCREEN_WIDTH - title_image.get_width()) // 2
+            title_y = 0 # Position title near top of screen
+            surface.blit(title_image, (title_x, title_y))
+    
+    def handle_event(self, event):
+        """Handle menu events (mouse clicks, hover)."""
+        if event.type == pygame.MOUSEMOTION:
+            self._check_button_hover(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Left mouse button
+                return self._handle_button_click(event.pos)
+        return None
+    
+    def draw(self, surface):
+        """Draw the entire main menu (title and buttons)."""
+        self._draw_title(surface)
+        self._draw_buttons(surface)
+
+
 
 Player = MainPlayer()
 Enemy = ZEnemy()
 Menu1 = MainMenu()
+Menu2 = GameOverMenu()
 Camera = PlayerCamera()
 
 # Game state management
@@ -619,10 +711,10 @@ while running:
     #TODO: once enemies & projectiles are added, ensure pressing this freezes everything!!!
 
 
-    # Clear screen ensures no ghosting is happening 
+    # Clear screen ensures no ghosting is happening.
     screen.fill(PRETTYCOLOR)
     
-    # Update and draw based on current game state
+    # Checks what game state we're in
     if game_state == "menu":
         # Draw the main menu
         Menu1.draw(screen)
@@ -657,14 +749,29 @@ while running:
         
         Enemy.update()
         Enemy.draw(screen)
-    if game_state == "over":
-        print("Game Over Screen is Drawn")
+
+    if PHealth == 0:
+        game_state = "gameover"
+    
+
+
+    if game_state == "gameover":
+        gameoveraction = Menu2.handle_event(event)
+        if gameoveraction == "Retry":
+            game_state = "menu"
+        elif action == "Quit like a Pleb!":
+            running = False
+        # "Load" button can be handled later when save/load is implemented
+        if gameoveraction == "Save Run":
+            print("I have saved run! Not really!")
+            pass        #print("Game Over Screen is Drawn")
         #pygame.time.wait(10)
-        game_state == "menu"
+        game_state == "gameover"
         #TODO: Add score function right here
         #Draw the menu
-        Menu1.draw(screen)
-        Menu1.handle_event(event)
+        Menu2.handle_event(event)
+        Menu2.draw(screen)
+
     # Update display
     pygame.display.update()
     
