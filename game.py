@@ -44,7 +44,7 @@ TITLE_GLIMMER_FRAMES=0
 # This for the Wizard sprites only, warriors will be seperate. ADDING WIZARD_  might fix a conflicting problem later on
 WIZARD_IDLE_FRAMES = 6
 WIZARD_RUN_FRAMES  = 4
-WIZARD_ATTACK_FRAMES = 11  # this is also the heal frames for wizards!!
+WIZARD_ATTACK_FRAMES = 11  # this is the heal frames for wizards!! Same animation, different colors :)
 WIZARD_CHARACTER_EFFECT_FRAMES = 11
 PLAYER_HEIGHT = 192
 PLAYER_WIDTH = PLAYER_HEIGHT
@@ -152,13 +152,15 @@ def load_animation(path, frame_w, frame_h, num_frames, row=0, spacing_x=0, margi
 
 images = {
     "title_image": load_image(os.path.join(title_dir,"title_placeholder.png"),TITLEF_W, TITLEF_H),
-    "gameover_image": load_image(os.path.join(title_dir,"gameover_title.png"), TITLEF_W, TITLEF_H)
+    "gameover_image": load_image(os.path.join(title_dir,"gameover_title.png"), TITLEF_W, TITLEF_H),
+    "base_image": load_image(os.path.join(base_assests_dir,"Monastery.png"), 192,320)
 # TODO: Each sprite is gonna be different later on im pretty sure, adjust FRAME_W and FRAME_H instead of being a const. const -> variable
 }
 
 animations = {
     "wizard_idle": load_animation(os.path.join(wizard_dir, "Idle.png"), FRAME_W, FRAME_H, WIZARD_IDLE_FRAMES),
     "wizard_run" : load_animation(os.path.join(wizard_dir, "Run.png"),  FRAME_W, FRAME_H, WIZARD_RUN_FRAMES),
+    "wizard_attack": load_animation(os.path.join(wizard_dir,"Heal.png"), FRAME_W, FRAME_H, WIZARD_ATTACK_FRAMES),
     "enemy_idle": load_animation(os.path.join(enemy_dir, "Warrior_Idle.png"), FRAME_W, FRAME_H, ENEMY_IDLE_FRAMES),
     "enemy_run": load_animation(os.path.join(enemy_dir, "Warrior_Run.png"), FRAME_W, FRAME_H, ENEMY_RUN_FRAMES),
     "enemy_attack1": load_animation(os.path.join(enemy_dir, "Warrior_Attack1.png"), FRAME_W, FRAME_H, ENEMY_ATTACK_FRAMES),
@@ -328,12 +330,11 @@ class MainPlayer:
             print(f"Player is at {self.rect.x} and {self.rect.y}")
             print(f"The cursor is at ")
         if keys[pygame.K_F3]:
-            Enemy.admin_move(speed=ESpeed)
+            Enemy.dev_move(speed=ESpeed)
             print("I have moved the enemy!")
         # TODO: Add detection on where mouse is clicked and make player face that way 
         # TODO: Add check if been hit, if true then highlight character red AND take away subtract Damage from PlayerHealth 
         # TODO: Add creation of sprites to hit enemies, magic missle is the first spell to make
-    
     def _update_animation(self, moving):
         """
         Update animation frame based on movement state and timing.
@@ -355,10 +356,6 @@ class MainPlayer:
         self._refresh_mask()
     
     def update(self):
-        """
-        Main update method called each frame.
-        Coordinates movement, input handling, and animation updates.
-        """
         keys = pygame.key.get_pressed()
         
         # Handle movement and get movement state
@@ -371,13 +368,8 @@ class MainPlayer:
         self._update_animation(moving)
     
     def draw(self, surface, camera=None):
-        """
-        Draw the player sprite to the given surface.
-        
-        Args:
-            surface: The pygame surface to draw on
-            camera: Optional PlayerCamera instance. If provided, applies camera offset.
-        """
+       # Draw the player sprite to the given surface.
+
         if camera:
             # Apply camera offset to convert world position to screen position
             screen_rect = camera.apply(self.rect)
@@ -390,7 +382,7 @@ class MainPlayer:
 #Enemy Code & Logic
 class ZEnemy:
     def __init__(self):
-        """Initialize player with animation and position."""
+        """Initialize enemy with animation and position."""
         super().__init__()
         self.animations = animations
         self.anim = "enemy_idle" 
@@ -402,6 +394,8 @@ class ZEnemy:
         self.last_update_ms = pygame.time.get_ticks() 
         self.facing_left = False
         self._is_moving = False
+        self.health = 10
+        self.visible = True
         self._refresh_mask()
 
     def _refresh_mask(self):
@@ -417,7 +411,7 @@ class ZEnemy:
             self.last_update_ms = pygame.time.get_ticks()
             # Keep position while swapping images
             self.rect = self.image.get_rect(center=self.rect.center)
-    def admin_move(self, speed=ESpeed):
+    def dev_move(self, speed=ESpeed):
         """Debug helper to nudge the enemy horizontally."""
         if speed == 0:
             moving = False
@@ -427,22 +421,29 @@ class ZEnemy:
             moving = True
         self._is_moving = moving
 
+    #NOTES & TODO
+        #TODO: Since enemy is not moving, no animation will play. 
 
-    
-    #TODO: Since enemy is not moving, no animation will play. 
-
-    #TODO: Collision Code 
-    #NOTE: If Enemy is Colliding with player, Enemy should perform a basic melee attack.
-    #NOTE: Secondly, if Enemy is within 50 pxls of player, it shoots a projectile
+        #TODO: Collision Code 
+        #NOTE: If Enemy is Colliding with player, Enemy should perform a basic melee attack.
+        #NOTE: Secondly, if Enemy is within 50 pxls of player, it shoots a projectile
     def collision(self):
 
+
+
+
         pass   
-       
-       
+    #
+
+
         #TODO: Enemy damage code
-    def Damage(self):
-        pass
-    
+    def hit(self): # ALL NEW
+        if self.health > 0:
+            self.health -= 1
+        else:
+            self.visible = False
+        print('hit')    
+
     def _update_animation(self, moving):
         """
         Update animation frame based on movement state and timing.
@@ -463,28 +464,26 @@ class ZEnemy:
             self.image = pygame.transform.flip(self.image, True, False)
         self._refresh_mask()
 
-
     def update(self):
         
         self._update_animation(self._is_moving)
         self._is_moving = False
         
 
-
-
     def draw(self, surface, camera=None):
         # Always draw in world space using camera offset.
         # If no camera is provided, fall back to the global Camera instance.
         active_camera = camera if camera is not None else Camera if 'Camera' in globals() else None
-        if active_camera:
-            screen_rect = active_camera.apply(self.rect)
-            surface.blit(self.image, screen_rect)
-        else:
-            surface.blit(self.image, self.rect)
-#
+        if self.visible:
+            if active_camera:
+                screen_rect = active_camera.apply(self.rect)
+                surface.blit(self.image, screen_rect)
+            else:
+                surface.blit(self.image, self.rect)
+    #
 #Map Drawing 
 #TODO: Draw Map on screen, create some trees or other foilage to liven up world
-#NOTE: Keep code compitable with drawing a border around for water or cliffs.
+#NOTE: Keep code compitable with drawing a border around for water or cliffs. This code is ONLY For the world & is seperate from existing barriers
 class Map:
     def loadmap(self):
         
@@ -494,6 +493,26 @@ class Map:
     pass
 
 #
+class Base:
+    def __init__(self):
+        super().__init__
+        self.image = images["base_image"]
+        self.rect = self.image.get_rect(center=(-2135, 18))
+        
+        
+        pass
+    def update(self):
+        
+        pass
+    def draw(self, surface, camera=None):
+        # Always draw in world space using camera offset.
+        # If no camera is provided, fall back to the global Camera instance.
+        active_camera = camera if camera is not None else Camera if 'Camera' in globals() else None
+        if active_camera:
+            screen_rect = active_camera.apply(self.rect)
+            surface.blit(self.image, screen_rect)
+        else:
+            surface.blit(self.image, self.rect)
 #Menu Code
 class MainMenu: 
     def __init__(self):
@@ -677,6 +696,14 @@ Enemy = ZEnemy()
 Menu1 = MainMenu()
 Menu2 = GameOverMenu()
 Camera = PlayerCamera()
+HomeBase = Base()
+
+#Measurements for walls & bases
+#Home base wall starts at -1785,-500 & Ends at -1785,2308
+#Home base sprite should be at -2135 and 18
+#Enemy Base Wall starts 1785,-500 & Ends at 1785,2308
+#Enemy Base Sprite should be at 2000 & 18
+
 
 # Game state management
 # "menu" = showing main menu, "playing" = game is active, "gameover" = game over screen, only met once player health or base health = 0
@@ -697,7 +724,7 @@ while running:
             elif action == "Quit":
                 running = False
             # "Load" button can be handled later when save/load is implemented
-        elif game_state == "playing":
+        if game_state == "playing":
             # Handle game events (like Escape to return to menu)
             if event.type == pygame.KEYDOWN:  # checks if a key is pressed down
                 if event.key == pygame.K_ESCAPE: #  checks if the key is the escape key
@@ -707,7 +734,22 @@ while running:
                     PHealth -= EAttackDmg
                     print(f"Ouch! I've taken {EAttackDmg} I am now at {PHealth}")
             if PHealth <= 0 or BaseHealth <= 0:
-                game_state = "over"
+                game_state = "gameover"
+        if game_state == "gameover":
+            # Handle gameover menu events (button clicks, hover)
+            gameoveraction = Menu2.handle_event(event)
+            if gameoveraction == "Retry":
+                game_state = "playing"
+                # Reset health values when retrying, if still 0 game constantly restarts.
+                PHealth = 20
+                BaseHealth = BASE_HEALTH
+                print(game_state)
+            elif gameoveraction == "Quit like a Pleb!":
+                running = False
+            # "Load" button can be handled later when save/load is implemented
+            if gameoveraction == "Save Run":
+                print("I have saved run! Not really!")
+                pass
     #TODO: once enemies & projectiles are added, ensure pressing this freezes everything!!!
 
 
@@ -719,7 +761,7 @@ while running:
         # Draw the main menu
         Menu1.draw(screen)
         
-    elif game_state == "playing":
+    if game_state == "playing":
         # Update player state, this handles movement, animation, input etc. 
         Player.update()
        # Enemy.update()
@@ -727,10 +769,9 @@ while running:
         Camera.update(Player.rect)
         # Draw Player onto screen with camera offset
         Player.draw(screen, Camera)
-
-
-
-
+        #Nowe we draw our objects BEFORE colission is done.
+        HomeBase.draw(screen)
+        #Obstacle testing
         player_hit_obstacle = False
         for obstacle in obstacles:
             obstacle_rect = obstacle["rect"]
@@ -742,34 +783,20 @@ while running:
             screen_rect = Camera.apply(obstacle_rect)
             pygame.draw.rect(screen, color, screen_rect)
 
-        if player_hit_obstacle:
-            print("Player collided with an obstacle.")
-
-
-        
+       # if player_hit_obstacle:
+       #     print("Player collided with an obstacle.")
+        # Enemy updates called in game world
         Enemy.update()
         Enemy.draw(screen)
 
-    if PHealth == 0:
+    if PHealth <= 0 or BaseHealth <= 0:
         game_state = "gameover"
     
 
 
     if game_state == "gameover":
-        gameoveraction = Menu2.handle_event(event)
-        if gameoveraction == "Retry":
-            game_state = "menu"
-        elif action == "Quit like a Pleb!":
-            running = False
-        # "Load" button can be handled later when save/load is implemented
-        if gameoveraction == "Save Run":
-            print("I have saved run! Not really!")
-            pass        #print("Game Over Screen is Drawn")
-        #pygame.time.wait(10)
-        game_state == "gameover"
         #TODO: Add score function right here
         #Draw the menu
-        Menu2.handle_event(event)
         Menu2.draw(screen)
 
     # Update display
